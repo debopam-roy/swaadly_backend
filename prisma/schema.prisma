@@ -1,0 +1,495 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Authentication table - handles login credentials and account status
+model Auth {
+  id       String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  // Authentication identifiers
+  email     String?  @unique @db.Text
+  phone     String?  @unique @db.Text
+  googleId  String?  @unique @map("google_id") @db.Text
+
+
+  // Verification flags
+  emailVerified Boolean @default(false) @map("email_verified")
+  phoneVerified Boolean @default(false) @map("phone_verified")
+
+  // Account status
+  isActive      Boolean   @default(true) @map("is_active")
+  isBlocked     Boolean   @default(false) @map("is_blocked")
+  blockedReason String?   @map("blocked_reason") @db.Text
+  blockedAt     DateTime? @map("blocked_at")
+
+  // Timestamps
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  lastLogin DateTime? @map("last_login")
+
+  // Relations
+  user     User?         @relation("AuthToUser")
+  sessions AuthSession[]
+
+  @@map("auth")
+}
+
+// User sessions table - tracks refresh tokens and device info
+model AuthSession {
+  id     String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  authId String @map("auth_id") @db.Text
+  auth   Auth   @relation(fields: [authId], references: [id], onDelete: Cascade)
+
+  // Session data
+  refreshTokenHash String @unique @map("refresh_token_hash") @db.Text
+
+  // Device & Security info
+  deviceInfo Json?   @map("device_info") @db.JsonB
+  ipAddress  String? @map("ip_address") @db.Inet
+  userAgent  String? @map("user_agent") @db.Text
+
+  // Session lifecycle
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastUsedAt DateTime @default(now()) @map("last_used_at")
+
+  // Session status
+  revoked Boolean @default(false)
+
+  @@index([authId], map: "auth_sessions_auth_id_idx")
+  @@index([expiresAt], map: "auth_sessions_expires_at_idx")
+  @@index([authId, expiresAt, revoked], map: "auth_sessions_active_idx")
+  @@index([ipAddress], map: "auth_sessions_ip_address_idx")
+  @@index([refreshTokenHash, expiresAt, revoked], map: "auth_sessions_validation_idx")
+  @@map("auth_sessions")
+}
+
+// User profile table - stores user information separate from auth
+model User {
+  id     String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  authId String @unique @map("auth_id") @db.Text
+  auth   Auth   @relation("AuthToUser", fields: [authId], references: [id], onDelete: Cascade)
+
+  // Profile information
+  firstName   String? @map("first_name") @db.VarChar(100)
+  lastName    String? @map("last_name") @db.VarChar(100)
+  displayName String? @map("display_name") @db.VarChar(150)
+  avatarUrl   String? @map("avatar_url") @db.Text
+
+  // Contact & Address
+  addressLine1 String? @map("address_line1") @db.VarChar(255)
+  addressLine2 String? @map("address_line2") @db.VarChar(255)
+  city         String? @db.VarChar(100)
+  state        String? @db.VarChar(100)
+  postalCode   String? @map("postal_code") @db.VarChar(20)
+  country      String? @db.VarChar(100)
+
+  // Additional profile data
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+
+  // User preferences
+  preferences Json @default("{}") @db.JsonB
+
+  // Metadata
+  onboardingCompleted Boolean   @default(false) @map("onboarding_completed")
+  profileCompletedAt  DateTime? @map("profile_completed_at")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  orders Order[] @relation("UserToOrders")
+
+  @@index([firstName, lastName], map: "users_full_name_idx")
+  @@index([onboardingCompleted], map: "users_onboarding_idx")
+  @@index([createdAt(sort: Desc)], map: "users_created_at_idx")
+  @@map("users")
+}
+
+// Products table
+model Product {
+  id    String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  // Basic Info
+  name  String @db.VarChar(255)
+  slug  String @unique @db.VarChar(255)
+  brand String @default("Swaadly") @db.VarChar(100)
+
+  // Description
+  shortDescription String? @map("short_description") @db.Text
+  longDescription  String? @map("long_description") @db.Text
+
+  // Product Type/Tags (replaces category)
+  productType String?  @map("product_type") @db.VarChar(50)
+  tags        String[] @default([])
+
+  // Nutrition Info
+  proteinPer100g    Decimal? @map("protein_per_100g") @db.Decimal(5, 2)
+  caloriesPer100g   Int?     @map("calories_per_100g")
+  nutritionalInfo   Json?    @map("nutritional_info") @db.JsonB
+
+  // Product Features
+  features Json? @db.JsonB
+
+  // Usage Instructions / Best Ways to Eat
+  usageInstructions String? @map("usage_instructions") @db.Text
+
+  // Status
+  isActive   Boolean @default(true) @map("is_active")
+  isFeatured Boolean @default(false) @map("is_featured")
+
+  // Statistics (denormalized for performance)
+  totalSales    Int     @default(0) @map("total_sales")
+  totalReviews  Int     @default(0) @map("total_reviews")
+  averageRating Decimal @default(0.00) @map("average_rating") @db.Decimal(3, 2)
+  viewCount     Int     @default(0) @map("view_count")
+
+  // Display Order (manual sorting)
+  displayOrder Int @default(0) @map("display_order")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  variants   ProductVariant[]
+  images     ProductImage[]
+  orderItems OrderItem[]      @relation("OrderItemToProduct")
+
+  @@index([isActive], map: "products_is_active_idx")
+  @@index([isFeatured], map: "products_is_featured_idx")
+  @@index([averageRating(sort: Desc)], map: "products_average_rating_idx")
+  @@index([totalSales(sort: Desc)], map: "products_total_sales_idx")
+  @@index([tags], map: "products_tags_idx", type: Gin)
+  @@index([productType], map: "products_product_type_idx")
+  @@index([displayOrder], map: "products_display_order_idx")
+  @@map("products")
+}
+
+// Product Variants table
+model ProductVariant {
+  id        String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  productId String  @map("product_id") @db.Text
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // SKU & Barcode
+  sku     String  @unique @db.VarChar(100)
+  barcode String? @db.VarChar(100)
+
+  // Variant Attributes
+  weight     Int    @db.Integer
+  weightUnit String @default("g") @map("weight_unit") @db.VarChar(10)
+
+  // Pricing
+  mrp                 Decimal @db.Decimal(10, 2)
+  sellingPrice        Decimal @map("selling_price") @db.Decimal(10, 2)
+  discountPercentage  Decimal @default(0.00) @map("discount_percentage") @db.Decimal(5, 2)
+
+  // Coupon (optional)
+  couponCode         String?  @map("coupon_code") @db.VarChar(50)
+  couponAppliedPrice Decimal? @map("coupon_applied_price") @db.Decimal(10, 2)
+
+  // Inventory
+  stockQuantity     Int @default(0) @map("stock_quantity") @db.Integer
+  lowStockThreshold Int @default(10) @map("low_stock_threshold") @db.Integer
+
+  // Status
+  isAvailable Boolean @default(true) @map("is_available")
+  isDefault   Boolean @default(false) @map("is_default")
+
+  // Display Order
+  displayOrder Int @default(0) @map("display_order") @db.Integer
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  orderItems OrderItem[] @relation("OrderItemToVariant")
+
+  @@index([productId], map: "product_variants_product_id_idx")
+  @@index([isAvailable], map: "product_variants_is_available_idx")
+  @@index([stockQuantity], map: "product_variants_stock_idx")
+  @@index([productId, isDefault], map: "product_variants_is_default_idx")
+  @@map("product_variants")
+}
+
+// Product Images table
+model ProductImage {
+  id        String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  productId String  @map("product_id") @db.Text
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Image Details
+  imageUrl     String  @map("image_url") @db.Text
+  thumbnailUrl String? @map("thumbnail_url") @db.Text
+  altText      String? @map("alt_text") @db.VarChar(255)
+
+  // Display
+  displayOrder Int     @default(0) @map("display_order") @db.Integer
+  isPrimary    Boolean @default(false) @map("is_primary")
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([productId], map: "product_images_product_id_idx")
+  @@index([productId, isPrimary], map: "product_images_is_primary_idx")
+  @@index([productId, displayOrder], map: "product_images_display_order_idx")
+  @@map("product_images")
+}
+
+// ============================================
+// ORDERS SYSTEM
+// ============================================
+
+// Order Status Enum
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  REFUNDED
+  FAILED
+
+  @@map("order_status")
+}
+
+// Payment Status Enum
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+
+  @@map("payment_status")
+}
+
+// Payment Method Enum
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  UPI
+  NET_BANKING
+  WALLET
+  COD
+  EMI
+
+  @@map("payment_method")
+}
+
+// Delivery Type Enum
+enum DeliveryType {
+  STANDARD
+  EXPRESS
+  SAME_DAY
+
+  @@map("delivery_type")
+}
+
+// Main Orders table
+model Order {
+  id             String      @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  // Order Identification
+  orderNumber    String      @unique @map("order_number") @db.VarChar(50)
+
+  // User Information
+  userId         String      @map("user_id") @db.Text
+  user           User        @relation("UserToOrders", fields: [userId], references: [id], onDelete: Restrict)
+
+  // Order Status
+  status         OrderStatus @default(PENDING)
+
+  // Pricing Details
+  subtotal       Decimal     @db.Decimal(10, 2)
+  discountAmount Decimal     @default(0.00) @map("discount_amount") @db.Decimal(10, 2)
+  couponDiscount Decimal     @default(0.00) @map("coupon_discount") @db.Decimal(10, 2)
+  couponCode     String?     @map("coupon_code") @db.VarChar(50)
+  taxAmount      Decimal     @default(0.00) @map("tax_amount") @db.Decimal(10, 2)
+  deliveryFee    Decimal     @default(0.00) @map("delivery_fee") @db.Decimal(10, 2)
+  totalAmount    Decimal     @map("total_amount") @db.Decimal(10, 2)
+
+  // Delivery Information
+  deliveryType        DeliveryType    @default(STANDARD) @map("delivery_type")
+  shippingAddressLine1 String         @map("shipping_address_line1") @db.VarChar(255)
+  shippingAddressLine2 String?        @map("shipping_address_line2") @db.VarChar(255)
+  shippingCity         String         @map("shipping_city") @db.VarChar(100)
+  shippingState        String         @map("shipping_state") @db.VarChar(100)
+  shippingPostalCode   String         @map("shipping_postal_code") @db.VarChar(20)
+  shippingCountry      String         @default("India") @map("shipping_country") @db.VarChar(100)
+
+  // Contact Information
+  customerName  String  @map("customer_name") @db.VarChar(200)
+  customerEmail String  @map("customer_email") @db.VarChar(255)
+  customerPhone String  @map("customer_phone") @db.VarChar(20)
+
+  // Courier/Shipping Tracking
+  externalOrderId String?   @unique @map("external_order_id") @db.VarChar(100)
+  trackingNumber  String?   @unique @map("tracking_number") @db.VarChar(100)
+  courierName     String?   @map("courier_name") @db.VarChar(100)
+  shippedAt       DateTime? @map("shipped_at")
+  deliveredAt     DateTime? @map("delivered_at")
+  estimatedDelivery DateTime? @map("estimated_delivery")
+
+  // Order Lifecycle Timestamps
+  confirmedAt DateTime? @map("confirmed_at")
+  cancelledAt DateTime? @map("cancelled_at")
+
+  // Cancellation Details
+  cancellationReason String? @map("cancellation_reason") @db.Text
+  cancelledBy        String? @map("cancelled_by") @db.VarChar(50)
+
+  // Special Instructions
+  orderNotes     String? @map("order_notes") @db.Text
+  deliveryNotes  String? @map("delivery_notes") @db.Text
+
+  // Metadata
+  metadata       Json?   @db.JsonB
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  items         OrderItem[]
+  payments      Payment[]
+  statusHistory OrderStatusHistory[]
+
+  @@index([userId], map: "orders_user_id_idx")
+  @@index([status], map: "orders_status_idx")
+  @@index([orderNumber], map: "orders_order_number_idx")
+  @@index([externalOrderId], map: "orders_external_order_id_idx")
+  @@index([trackingNumber], map: "orders_tracking_number_idx")
+  @@index([createdAt(sort: Desc)], map: "orders_created_at_idx")
+  @@index([userId, status], map: "orders_user_status_idx")
+  @@index([userId, createdAt(sort: Desc)], map: "orders_user_created_at_idx")
+  @@map("orders")
+}
+
+// Order Items table
+model OrderItem {
+  id        String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  orderId   String @map("order_id") @db.Text
+  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Product Information
+  productId        String  @map("product_id") @db.Text
+  product          Product @relation("OrderItemToProduct", fields: [productId], references: [id], onDelete: Restrict)
+
+  variantId        String  @map("variant_id") @db.Text
+  variant          ProductVariant @relation("OrderItemToVariant", fields: [variantId], references: [id], onDelete: Restrict)
+
+  // Snapshot of product details at time of order
+  productName      String  @map("product_name") @db.VarChar(255)
+  productSlug      String  @map("product_slug") @db.VarChar(255)
+  variantSku       String  @map("variant_sku") @db.VarChar(100)
+  variantWeight    Int     @map("variant_weight")
+  variantWeightUnit String @map("variant_weight_unit") @db.VarChar(10)
+
+  // Pricing snapshot at time of order
+  quantity          Int     @db.Integer
+  unitPrice         Decimal @map("unit_price") @db.Decimal(10, 2)
+  unitMrp           Decimal @map("unit_mrp") @db.Decimal(10, 2)
+  discountPerUnit   Decimal @default(0.00) @map("discount_per_unit") @db.Decimal(10, 2)
+  totalPrice        Decimal @map("total_price") @db.Decimal(10, 2)
+
+  // Product image snapshot
+  productImageUrl String? @map("product_image_url") @db.Text
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orderId], map: "order_items_order_id_idx")
+  @@index([productId], map: "order_items_product_id_idx")
+  @@index([variantId], map: "order_items_variant_id_idx")
+  @@map("order_items")
+}
+
+// Payment table
+model Payment {
+  id        String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  orderId   String  @map("order_id") @db.Text
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Payment Details
+  paymentMethod    PaymentMethod  @map("payment_method")
+  paymentStatus    PaymentStatus  @default(PENDING) @map("payment_status")
+  amount           Decimal        @db.Decimal(10, 2)
+  currency         String         @default("INR") @db.VarChar(10)
+
+  // Payment Gateway Information
+  paymentGateway      String?  @map("payment_gateway") @db.VarChar(50)
+  gatewayOrderId      String?  @unique @map("gateway_order_id") @db.VarChar(100)
+  gatewayPaymentId    String?  @unique @map("gateway_payment_id") @db.VarChar(100)
+  gatewaySignature    String?  @map("gateway_signature") @db.Text
+
+  // Transaction Details
+  transactionId    String?   @unique @map("transaction_id") @db.VarChar(100)
+  transactionDate  DateTime? @map("transaction_date")
+
+  // Refund Information
+  refundAmount     Decimal?  @default(0.00) @map("refund_amount") @db.Decimal(10, 2)
+  refundedAt       DateTime? @map("refunded_at")
+  refundReason     String?   @map("refund_reason") @db.Text
+  refundReference  String?   @map("refund_reference") @db.VarChar(100)
+
+  // Failure Information
+  failureReason    String?   @map("failure_reason") @db.Text
+  failureCode      String?   @map("failure_code") @db.VarChar(50)
+
+  // Additional Details
+  paymentMetadata  Json?     @db.JsonB
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([orderId], map: "payments_order_id_idx")
+  @@index([paymentStatus], map: "payments_status_idx")
+  @@index([gatewayOrderId], map: "payments_gateway_order_id_idx")
+  @@index([gatewayPaymentId], map: "payments_gateway_payment_id_idx")
+  @@index([transactionId], map: "payments_transaction_id_idx")
+  @@map("payments")
+}
+
+// Order Status History
+model OrderStatusHistory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  orderId   String   @map("order_id") @db.Text
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Status Change Details
+  fromStatus OrderStatus? @map("from_status")
+  toStatus   OrderStatus  @map("to_status")
+
+  // Change Context
+  changedBy  String?  @map("changed_by") @db.VarChar(50)
+  reason     String?  @db.Text
+  notes      String?  @db.Text
+
+  // Metadata
+  metadata   Json?    @db.JsonB
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orderId], map: "order_status_history_order_id_idx")
+  @@index([orderId, createdAt(sort: Desc)], map: "order_status_history_order_created_idx")
+  @@map("order_status_history")
+}
