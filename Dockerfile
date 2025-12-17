@@ -14,7 +14,7 @@ RUN yarn install --frozen-lockfile
 COPY . .
 
 # Generate Prisma Client (requires DATABASE_URL but doesn't connect)
-ARG DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+ARG DATABASE_URL="postgresql://postgres:Swaadly@2025@/swaadly-postgres-db?host=/cloudsql/swaadly-backend:asia-south1:swaadly-postgres-db"
 RUN npx prisma generate
 
 # Build application
@@ -28,7 +28,7 @@ WORKDIR /app
 # Install production dependencies only
 COPY package.json yarn.lock ./
 COPY prisma ./prisma/
-ARG DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+ARG DATABASE_URL="postgresql://postgres:Swaadly@2025@/swaadly-postgres-db?host=/cloudsql/swaadly-backend:asia-south1:swaadly-postgres-db"
 RUN yarn install --frozen-lockfile --production && \
     npx prisma generate && \
     yarn cache clean
