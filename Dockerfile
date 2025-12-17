@@ -6,6 +6,7 @@ WORKDIR /app
 # Copy package files
 COPY package.json yarn.lock ./
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 
 # Install dependencies
 RUN yarn install --frozen-lockfile
@@ -28,6 +29,7 @@ WORKDIR /app
 # Install production dependencies only
 COPY package.json yarn.lock ./
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 ARG DATABASE_URL="postgresql://postgres:Swaadly@2025@/swaadly-postgres-db?host=/cloudsql/swaadly-backend:asia-south1:swaadly-postgres-db"
 RUN yarn install --frozen-lockfile --production && \
     npx prisma generate && \
