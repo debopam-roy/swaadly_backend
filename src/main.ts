@@ -21,8 +21,8 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       configService.get<string>('FRONTEND_URL'), 
-      'http://localhost:3000', 
-      'https://studio.apollographql.com'
+      'https://swaadly-frontend.vercel.app',
+      'http://localhost:3000'
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],

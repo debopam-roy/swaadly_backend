@@ -90,7 +90,8 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          docker build -t gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
+          docker build --build-arg DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" \
+                       -t gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
           docker tag gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
                      gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
           docker push gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
@@ -117,7 +118,7 @@ jobs:
             --region ${{ env.GCP_REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars "NODE_ENV=production" \
+            --set-env-vars "NODE_ENV=production,DATABASE_URL=${{ secrets.DATABASE_URL }},REDIS_HOST=${{ secrets.REDIS_HOST }},REDIS_PORT=${{ secrets.REDIS_PORT }},JWT_ACCESS_SECRET=${{ secrets.JWT_ACCESS_SECRET }},JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }},RESEND_API_KEY=${{ secrets.RESEND_API_KEY }},FAST2SMS_API_KEY=${{ secrets.FAST2SMS_API_KEY }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }},FRONTEND_URL=https://www.swaadly.com" \
             --memory 512Mi \
             --cpu 1 \
             --min-instances 0 \
