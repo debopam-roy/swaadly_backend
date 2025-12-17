@@ -49,7 +49,7 @@ async function bootstrap() {
   // API prefix
   app.setGlobalPrefix('api/v1');
 
-  const port = configService.get<number>('app.port') || 5000;
+  const port = process.env.PORT || configService.get<number>('app.port') || 5000;
   await app.listen(port, '0.0.0.0');
 
   logger.log(`🚀 Application is running on port: ${port}.`);
