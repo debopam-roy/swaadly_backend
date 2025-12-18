@@ -11,8 +11,54 @@ env:
   REGION: 'asia-south1'
 
 jobs:
-  deploy:
+  migrate:
+    name: Run Database Migrations
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npx prisma generate
+
+      - name: Download Cloud SQL Proxy
+        run: |
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.2/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+
+      - name: Run Migrations via Cloud SQL Proxy
+        run: |
+          ./cloud-sql-proxy swaadly-backend:asia-south1:swaadly-postgres-db --port 5432 &
+          PROXY_PID=$!
+          sleep 5
+          
+          npx prisma migrate deploy
+          
+          kill $PROXY_PID
+        env:
+          DATABASE_URL: postgresql://postgres:Swaadly@2025@localhost:5432/swaadly-postgres-db
+
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: migrate
 
     steps:
       - name: Checkout code
@@ -66,9 +112,10 @@ jobs:
           THROTTLER_LIMIT=100,\
           APP_PORT=8080,\
           NODE_ENV=production,\
-          FRONTEND_URL=https://www.swaadly.com;https://app.swaadly.com;https://swaadly-frontend.vercel.app\
+          FRONTEND_URL=https://www.swaadly.com;https://app.swaadly.com;https://swaadly-frontend.vercel.app,\
           GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}"
 
       - name: Show URL
         run: |
-          gcloud run services describe ${{ env.SERVICE_NAME }} --region ${{ env.REGION }} --format 'value(status.url)'
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region ${{ env.REGION }} --format 'value(status.url)')
+          echo "🚀 Deployed to: $URL"
