@@ -65,27 +65,21 @@ jobs:
           MIGRATION_STATUS=$(npx prisma migrate status 2>&1 || true)
           echo "$MIGRATION_STATUS"
           
-          # Check if there are failed migrations
-          if echo "$MIGRATION_STATUS" | grep -q "migration.*failed"; then
-            echo "⚠️  Found failed migrations, resolving..."
+          # Extract orphaned migrations (in database but not in local migrations folder)
+          ORPHANED_MIGRATIONS=$(echo "$MIGRATION_STATUS" | grep -A 999 "not found locally" | grep -E "^\s*[0-9]{14}_" | awk '{print $1}' || true)
+          
+          if [ ! -z "$ORPHANED_MIGRATIONS" ]; then
+            echo "⚠️  Found orphaned migrations in database, resolving..."
+            echo "$ORPHANED_MIGRATIONS"
             
-            # Extract failed migration names
-            FAILED_MIGRATIONS=$(echo "$MIGRATION_STATUS" | grep -oP '\d{14}_\w+(?=.*failed)' || true)
-            
-            if [ ! -z "$FAILED_MIGRATIONS" ]; then
-              echo "Failed migrations found:"
-              echo "$FAILED_MIGRATIONS"
-              
-              # Resolve each failed migration
-              while IFS= read -r migration; do
-                if [ ! -z "$migration" ]; then
-                  echo "Resolving failed migration: $migration"
-                  npx prisma migrate resolve --rolled-back "$migration" || true
-                fi
-              done <<< "$FAILED_MIGRATIONS"
-            fi
+            while IFS= read -r migration; do
+              if [ ! -z "$migration" ]; then
+                echo "Resolving orphaned migration as rolled back: $migration"
+                npx prisma migrate resolve --rolled-back "$migration" || true
+              fi
+            done <<< "$ORPHANED_MIGRATIONS"
           else
-            echo "✅ No failed migrations detected"
+            echo "✅ No orphaned migrations detected"
           fi
           
           echo "Running Prisma migrations..."
