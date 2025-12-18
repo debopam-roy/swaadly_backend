@@ -63,7 +63,7 @@ jobs:
           echo "Stopping Cloud SQL Proxy..."
           kill $PROXY_PID || true
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL_MIGRATION }}
 
   deploy:
     name: Deploy to Cloud Run
