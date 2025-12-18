@@ -57,13 +57,47 @@ jobs:
           echo "Waiting for proxy to be ready..."
           sleep 5
           
+          echo "Checking migration status..."
+          MIGRATION_STATUS=$(npx prisma migrate status 2>&1 || true)
+          echo "$MIGRATION_STATUS"
+          
+          # Check if there are failed migrations
+          if echo "$MIGRATION_STATUS" | grep -q "migration.*failed"; then
+            echo "⚠️  Found failed migrations, resolving..."
+            
+            # Extract failed migration names
+            FAILED_MIGRATIONS=$(echo "$MIGRATION_STATUS" | grep -oP '\d{14}_\w+(?=.*failed)' || true)
+            
+            if [ ! -z "$FAILED_MIGRATIONS" ]; then
+              echo "Failed migrations found:"
+              echo "$FAILED_MIGRATIONS"
+              
+              # Resolve each failed migration
+              while IFS= read -r migration; do
+                if [ ! -z "$migration" ]; then
+                  echo "Resolving failed migration: $migration"
+                  npx prisma migrate resolve --rolled-back "$migration" || true
+                fi
+              done <<< "$FAILED_MIGRATIONS"
+            fi
+          else
+            echo "✅ No failed migrations detected"
+          fi
+          
           echo "Running Prisma migrations..."
           npx prisma migrate deploy
           
+          EXIT_CODE=$?
+          
           echo "Stopping Cloud SQL Proxy..."
           kill $PROXY_PID || true
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_MIGRATION }}
+          
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Migration failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+          
+          echo "✅ Migrations completed successfully"
 
   deploy:
     name: Deploy to Cloud Run
@@ -107,7 +141,7 @@ jobs:
             --timeout 300 \
             --memory 512Mi \
             --cpu 1 \
-            --min-instances 1 \
+            --min-instances 0 \
             --max-instances 5 \
             --add-cloudsql-instances ${{ env.PROJECT_ID }}:${{ env.REGION }}:swaadly-postgres-db \
             --set-env-vars "\
