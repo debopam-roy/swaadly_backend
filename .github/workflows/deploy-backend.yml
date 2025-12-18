@@ -74,8 +74,8 @@ jobs:
             
             while IFS= read -r migration; do
               if [ ! -z "$migration" ]; then
-                echo "Resolving orphaned migration as rolled back: $migration"
-                npx prisma migrate resolve --rolled-back "$migration" || true
+                echo "Resolving orphaned migration as applied: $migration"
+                npx prisma migrate resolve --applied "$migration" || true
               fi
             done <<< "$ORPHANED_MIGRATIONS"
           else
