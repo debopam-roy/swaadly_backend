@@ -18,14 +18,10 @@ async function bootstrap() {
   app.use(helmet());
 
   // CORS configuration
-  const frontendUrls = configService.get<string>('FRONTEND_URL')
-    ?.split(',')
-    .map(url => url.trim())
-    .filter(url => url.length > 0) || [];
+  const allowedOrigins = configService.get<string>('FRONTEND_URL')?.split(';') || [];
 
   app.enableCors({
-    origin: [
-      ...frontendUrls],
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
