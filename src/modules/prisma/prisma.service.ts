@@ -30,7 +30,7 @@ export class PrismaService
   async onModuleInit() {
     try {
       await this.$connect();
-      this.logger.debug('Successfully connected to database');
+      this.logger.debug('Successfully connected to PostgreSQL Database');
     } catch (error) {
       this.logger.error('Failed to connect to database', error);
       throw error;

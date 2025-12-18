@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { OtpService } from './otp.service';
@@ -12,11 +12,23 @@ import { Fast2SmsProvider } from './providers/fast2sms.provider';
     {
       provide: 'REDIS_CLIENT',
       useFactory: (configService: ConfigService) => {
+        const logger = new Logger('RedisClient');
         const redisConfig = configService.get('redis') || {
           host: 'localhost',
           port: 6379,
         };
-        return new Redis(redisConfig);
+
+        const redis = new Redis(redisConfig);
+
+        redis.on('connect', () => {
+          logger.debug('Successfully connected to Redis Client');
+        });
+
+        redis.on('error', (error) => {
+          logger.error('Failed to connect to Redis Client', error);
+        });
+
+        return redis;
       },
       inject: [ConfigService],
     },

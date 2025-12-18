@@ -18,12 +18,14 @@ async function bootstrap() {
   app.use(helmet());
 
   // CORS configuration
+  const frontendUrls = configService.get<string>('FRONTEND_URL')
+    ?.split(',')
+    .map(url => url.trim())
+    .filter(url => url.length > 0) || [];
+
   app.enableCors({
     origin: [
-      configService.get<string>('FRONTEND_URL'), 
-      'https://swaadly-frontend.vercel.app',
-      'http://localhost:3000'
-    ],
+      ...frontendUrls],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -49,7 +51,7 @@ async function bootstrap() {
   // API prefix
   app.setGlobalPrefix('api/v1');
 
-  const port = process.env.PORT || configService.get<number>('app.port') || 5000;
+  const port = process.env.PORT || configService.get<number>('app.port') || 8080;
   await app.listen(port, '0.0.0.0');
 
   logger.log(`🚀 Application is running on port: ${port}.`);
