@@ -37,6 +37,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
 
       - name: Generate Prisma Client
         run: npx prisma generate
@@ -49,6 +51,8 @@ jobs:
           chmod +x cloud-sql-proxy
 
       - name: Run Migrations via Cloud SQL Proxy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_MIGRATION }}
         run: |
           echo "Starting Cloud SQL Proxy..."
           ./cloud-sql-proxy ${{ env.PROJECT_ID }}:${{ env.REGION }}:swaadly-postgres-db --port 5432 &
