@@ -18,4 +18,13 @@ export class AppController {
   postWelcome(): string {
     return this.appService.getWelcome();
   }
+
+  @Get('health')
+  healthCheck() {
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    };
+  }
 }
