@@ -35,13 +35,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'yarn'
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
 
       - name: Generate Prisma Client
-        run: npx prisma generate
+        run: yarn prisma generate
 
       - name: Download Cloud SQL Proxy
         run: |
@@ -55,7 +55,7 @@ jobs:
           ./cloud-sql-proxy ${{ env.CLOUD_SQL_INSTANCE }} --port 5432 &
           PROXY_PID=$!
           sleep 5
-          npx prisma migrate deploy
+          yarn prisma migrate deploy
           kill $PROXY_PID
 
   deploy:
