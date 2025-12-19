@@ -101,6 +101,8 @@ jobs:
             --min-instances 1 \
             --max-instances 5 \
             --add-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
+            --vpc-connector redis-connector \
+            --vpc-egress private-ranges-only \
             --set-env-vars "\
           DATABASE_URL=${{ secrets.DATABASE_URL }},\
           REDIS_HOST=${{ secrets.REDIS_HOST }},\
