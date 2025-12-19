@@ -4,24 +4,26 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 env:
   PROJECT_ID: 'swaadly-backend'
   SERVICE_NAME: 'swaadly-backend'
   REGION: 'asia-south1'
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
+  CLOUD_SQL_INSTANCE: 'swaadly-backend:asia-south1:swaadly-postgres-db'
 
 jobs:
   migrate:
     name: Run Database Migrations
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
-        id: auth
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
@@ -37,70 +39,30 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        env:
-          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
 
       - name: Generate Prisma Client
         run: npx prisma generate
-        env:
-          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
 
       - name: Download Cloud SQL Proxy
         run: |
           curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.2/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
 
-      - name: Run Migrations via Cloud SQL Proxy
+      - name: Run Migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_MIGRATION }}
         run: |
-          echo "Starting Cloud SQL Proxy..."
-          ./cloud-sql-proxy ${{ env.PROJECT_ID }}:${{ env.REGION }}:swaadly-postgres-db --port 5432 &
+          ./cloud-sql-proxy ${{ env.CLOUD_SQL_INSTANCE }} --port 5432 &
           PROXY_PID=$!
-          
-          echo "Waiting for proxy to be ready..."
           sleep 5
-          
-          echo "Checking migration status..."
-          MIGRATION_STATUS=$(npx prisma migrate status 2>&1 || true)
-          echo "$MIGRATION_STATUS"
-          
-          # Extract orphaned migrations (in database but not in local migrations folder)
-          ORPHANED_MIGRATIONS=$(echo "$MIGRATION_STATUS" | grep -A 999 "not found locally" | grep -E "^\s*[0-9]{14}_" | awk '{print $1}' || true)
-          
-          if [ ! -z "$ORPHANED_MIGRATIONS" ]; then
-            echo "⚠️  Found orphaned migrations in database, resolving..."
-            echo "$ORPHANED_MIGRATIONS"
-            
-            while IFS= read -r migration; do
-              if [ ! -z "$migration" ]; then
-                echo "Resolving orphaned migration as applied: $migration"
-                npx prisma migrate resolve --applied "$migration" || true
-              fi
-            done <<< "$ORPHANED_MIGRATIONS"
-          else
-            echo "✅ No orphaned migrations detected"
-          fi
-          
-          echo "Running Prisma migrations..."
           npx prisma migrate deploy
-          
-          EXIT_CODE=$?
-          
-          echo "Stopping Cloud SQL Proxy..."
-          kill $PROXY_PID || true
-          
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "❌ Migration failed with exit code $EXIT_CODE"
-            exit $EXIT_CODE
-          fi
-          
-          echo "✅ Migrations completed successfully"
+          kill $PROXY_PID
 
   deploy:
     name: Deploy to Cloud Run
     runs-on: ubuntu-latest
     needs: migrate
+    timeout-minutes: 20
 
     steps:
       - name: Checkout code
@@ -117,19 +79,13 @@ jobs:
       - name: Configure Docker
         run: gcloud auth configure-docker
 
-      - name: Build Docker Image
+      - name: Build and Push Docker Image
         run: |
-          echo "Building Docker image..."
           docker build -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
-
-      - name: Push Docker Image
-        run: |
-          echo "Pushing Docker image to GCR..."
           docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
 
       - name: Deploy to Cloud Run
         run: |
-          echo "Deploying to Cloud Run..."
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             --region ${{ env.REGION }} \
@@ -139,9 +95,9 @@ jobs:
             --timeout 300 \
             --memory 512Mi \
             --cpu 1 \
-            --min-instances 0 \
+            --min-instances 1 \
             --max-instances 5 \
-            --add-cloudsql-instances ${{ env.PROJECT_ID }}:${{ env.REGION }}:swaadly-postgres-db \
+            --add-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
             --set-env-vars "\
           DATABASE_URL=${{ secrets.DATABASE_URL }},\
           REDIS_HOST=${{ secrets.REDIS_HOST }},\
@@ -169,24 +125,8 @@ jobs:
           FRONTEND_URL=https://www.swaadly.com;https://app.swaadly.com;https://swaadly-frontend.vercel.app,\
           GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}"
 
-      - name: Get Deployment URL
-        id: get-url
+      - name: Get Service URL
         run: |
-          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+          gcloud run services describe ${{ env.SERVICE_NAME }} \
             --region ${{ env.REGION }} \
-            --format 'value(status.url)')
-          echo "url=$URL" >> $GITHUB_OUTPUT
-          echo "URL: $URL"
-
-      - name: Deployment Summary
-        run: |
-          echo "### 🚀 Deployment Successful!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Service:** ${{ env.SERVICE_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Region:** ${{ env.REGION }}" >> $GITHUB_STEP_SUMMARY
-          echo "**URL:** ${{ steps.get-url.outputs.url }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Database migrations applied successfully" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Docker image built and pushed" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Service deployed and running" >> $GITHUB_STEP_SUMMARY
+            --format 'value(status.url)'
