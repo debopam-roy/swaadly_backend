@@ -41,6 +41,8 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Generate Prisma Client
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
         run: yarn prisma generate
 
       - name: Download Cloud SQL Proxy
@@ -54,9 +56,10 @@ jobs:
         run: |
           ./cloud-sql-proxy ${{ env.CLOUD_SQL_INSTANCE }} --port 5432 &
           PROXY_PID=$!
-          sleep 5
+          trap "kill $PROXY_PID" EXIT
+          
+          timeout 30 bash -c 'until nc -z localhost 5432; do sleep 1; done'
           yarn prisma migrate deploy
-          kill $PROXY_PID
 
   deploy:
     name: Deploy to Cloud Run
