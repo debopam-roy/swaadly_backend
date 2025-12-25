@@ -4,9 +4,6 @@ import { Type } from 'class-transformer';
 export enum ProductSortBy {
   CREATED_AT = 'createdAt',
   NAME = 'name',
-  PRICE = 'price',
-  RATING = 'averageRating',
-  SALES = 'totalSales',
   DISPLAY_ORDER = 'displayOrder',
 }
 
@@ -22,16 +19,7 @@ export class QueryProductsDto {
 
   @IsOptional()
   @IsString()
-  productType?: string;
-
-  @IsOptional()
-  @IsString()
   tag?: string;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  isFeatured?: boolean;
 
   @IsOptional()
   @Type(() => Boolean)

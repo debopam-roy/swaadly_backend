@@ -16,9 +16,7 @@ export class ProductsService {
   }> {
     const {
       search,
-      productType,
       tag,
-      isFeatured,
       isActive = true, // Default to active products only
       sortBy = ProductSortBy.DISPLAY_ORDER,
       sortOrder = 'asc',
@@ -34,21 +32,13 @@ export class ProductsService {
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
-        { shortDescription: { contains: search, mode: 'insensitive' } },
+        { flavor: { contains: search, mode: 'insensitive' } },
         { tags: { has: search } },
       ];
     }
 
-    if (productType) {
-      where.productType = productType;
-    }
-
     if (tag) {
       where.tags = { has: tag };
-    }
-
-    if (isFeatured !== undefined) {
-      where.isFeatured = isFeatured;
     }
 
     // Build orderBy clause
@@ -56,17 +46,6 @@ export class ProductsService {
     switch (sortBy) {
       case ProductSortBy.NAME:
         orderBy = { name: sortOrder };
-        break;
-      case ProductSortBy.PRICE:
-        // We'll need to sort by the default variant's selling price
-        // For now, we'll use display order and handle price sorting later
-        orderBy = { displayOrder: sortOrder };
-        break;
-      case ProductSortBy.RATING:
-        orderBy = { averageRating: sortOrder };
-        break;
-      case ProductSortBy.SALES:
-        orderBy = { totalSales: sortOrder };
         break;
       case ProductSortBy.CREATED_AT:
         orderBy = { createdAt: sortOrder };
@@ -95,6 +74,7 @@ export class ProductsService {
           images: {
             orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
           },
+          cartImages: true,
         },
       }),
       this.prisma.product.count({ where }),
@@ -122,6 +102,7 @@ export class ProductsService {
         images: {
           orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
         },
+        cartImages: true,
       },
     });
 
@@ -143,20 +124,13 @@ export class ProductsService {
         images: {
           orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
         },
+        cartImages: true,
       },
     });
 
     if (!product) {
       return null;
     }
-
-    // Increment view count asynchronously
-    this.prisma.product
-      .update({
-        where: { slug },
-        data: { viewCount: { increment: 1 } },
-      })
-      .catch((err) => console.error('Failed to increment view count:', err));
 
     return this.mapToResponseDto(product);
   }
@@ -166,37 +140,25 @@ export class ProductsService {
       id: product.id,
       name: product.name,
       slug: product.slug,
+      flavor: product.flavor,
       brand: product.brand,
-      shortDescription: product.shortDescription,
-      longDescription: product.longDescription,
-      productType: product.productType,
+      aboutProduct: product.aboutProduct,
+      bestWayToEat: product.bestWayToEat,
+      bestWayToEatImageUrl: product.bestWayToEatImageUrl,
       tags: product.tags,
-      proteinPer100g: product.proteinPer100g
-        ? parseFloat(product.proteinPer100g)
-        : undefined,
-      caloriesPer100g: product.caloriesPer100g,
-      nutritionalInfo: product.nutritionalInfo,
-      features: product.features,
-      usageInstructions: product.usageInstructions,
       isActive: product.isActive,
-      isFeatured: product.isFeatured,
-      totalSales: product.totalSales,
-      totalReviews: product.totalReviews,
-      averageRating: parseFloat(product.averageRating),
-      viewCount: product.viewCount,
       displayOrder: product.displayOrder,
       variants: product.variants?.map((variant: any) => ({
         id: variant.id,
         sku: variant.sku,
         weight: variant.weight,
         weightUnit: variant.weightUnit,
+        proteinQuantity: variant.proteinQuantity
+          ? parseFloat(variant.proteinQuantity)
+          : undefined,
         mrp: parseFloat(variant.mrp),
         sellingPrice: parseFloat(variant.sellingPrice),
         discountPercentage: parseFloat(variant.discountPercentage),
-        couponCode: variant.couponCode,
-        couponAppliedPrice: variant.couponAppliedPrice
-          ? parseFloat(variant.couponAppliedPrice)
-          : undefined,
         stockQuantity: variant.stockQuantity,
         isAvailable: variant.isAvailable,
         isDefault: variant.isDefault,
@@ -204,10 +166,16 @@ export class ProductsService {
       images: product.images?.map((image: any) => ({
         id: image.id,
         imageUrl: image.imageUrl,
-        thumbnailUrl: image.thumbnailUrl,
+        deviceType: image.deviceType,
         altText: image.altText,
         isPrimary: image.isPrimary,
         displayOrder: image.displayOrder,
+      })),
+      cartImages: product.cartImages?.map((image: any) => ({
+        id: image.id,
+        imageUrl: image.imageUrl,
+        deviceType: image.deviceType,
+        altText: image.altText,
       })),
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,

@@ -12,6 +12,7 @@ import { VerificationModule } from './modules/verification/verification.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { ProductsModule } from './modules/products/products.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 import { CommonModule } from './common/common.module';
 import redisConfig from './config/redis.config';
 import jwtConfig from './config/jwt.config';
@@ -24,7 +25,7 @@ import fast2smsConfig from './config/fast2sms.config';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [appConfig, redisConfig, jwtConfig, otpConfig, fast2smsConfig],
-      envFilePath: '.env',
+      envFilePath: '.env.local',
     }),
     CommonModule,
     PrismaModule,
@@ -35,6 +36,7 @@ import fast2smsConfig from './config/fast2sms.config';
     VerificationModule,
     ProductsModule,
     OrdersModule,
+    ReviewsModule,
   ],
   controllers: [AppController],
   providers: [

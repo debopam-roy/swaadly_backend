@@ -3,11 +3,10 @@ export class ProductVariantResponseDto {
   sku: string;
   weight: number;
   weightUnit: string;
+  proteinQuantity?: number;
   mrp: number;
   sellingPrice: number;
   discountPercentage: number;
-  couponCode?: string;
-  couponAppliedPrice?: number;
   stockQuantity: number;
   isAvailable: boolean;
   isDefault: boolean;
@@ -16,35 +15,34 @@ export class ProductVariantResponseDto {
 export class ProductImageResponseDto {
   id: string;
   imageUrl: string;
-  thumbnailUrl?: string;
+  deviceType: 'DESKTOP' | 'MOBILE';
   altText?: string;
   isPrimary: boolean;
   displayOrder: number;
+}
+
+export class ProductCartImageResponseDto {
+  id: string;
+  imageUrl: string;
+  deviceType: 'DESKTOP' | 'MOBILE';
+  altText?: string;
 }
 
 export class ProductResponseDto {
   id: string;
   name: string;
   slug: string;
+  flavor?: string;
   brand: string;
-  shortDescription?: string;
-  longDescription?: string;
-  productType?: string;
+  aboutProduct?: string;
+  bestWayToEat?: string;
+  bestWayToEatImageUrl?: string;
   tags: string[];
-  proteinPer100g?: number;
-  caloriesPer100g?: number;
-  nutritionalInfo?: any;
-  features?: any;
-  usageInstructions?: string;
   isActive: boolean;
-  isFeatured: boolean;
-  totalSales: number;
-  totalReviews: number;
-  averageRating: number;
-  viewCount: number;
   displayOrder: number;
   variants?: ProductVariantResponseDto[];
   images?: ProductImageResponseDto[];
+  cartImages?: ProductCartImageResponseDto[];
   createdAt: Date;
   updatedAt: Date;
 }

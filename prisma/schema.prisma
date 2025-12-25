@@ -11,13 +11,12 @@ datasource db {
 
 // Authentication table - handles login credentials and account status
 model Auth {
-  id       String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
 
   // Authentication identifiers
-  email     String?  @unique @db.Text
-  phone     String?  @unique @db.Text
-  googleId  String?  @unique @map("google_id") @db.Text
-
+  email    String? @unique @db.Text
+  phone    String? @unique @db.Text
+  googleId String? @unique @map("google_id") @db.Text
 
   // Verification flags
   emailVerified Boolean @default(false) @map("email_verified")
@@ -106,7 +105,9 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  orders Order[] @relation("UserToOrders")
+  orders       Order[]       @relation("UserToOrders")
+  orderReviews OrderReview[]
+  itemReviews  ItemReview[]
 
   @@index([firstName, lastName], map: "users_full_name_idx")
   @@index([onboardingCompleted], map: "users_onboarding_idx")
@@ -116,41 +117,24 @@ model User {
 
 // Products table
 model Product {
-  id    String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
 
   // Basic Info
-  name  String @db.VarChar(255)
-  slug  String @unique @db.VarChar(255)
-  brand String @default("Swaadly") @db.VarChar(100)
+  name   String  @db.VarChar(255)
+  slug   String  @unique @db.VarChar(255)
+  flavor String? @db.VarChar(100)
+  brand  String  @default("Swaadly") @db.VarChar(100)
 
-  // Description
-  shortDescription String? @map("short_description") @db.Text
-  longDescription  String? @map("long_description") @db.Text
+  // Description & Usage
+  aboutProduct         String? @map("about_product") @db.Text
+  bestWayToEat         String? @map("best_way_to_eat") @db.Text
+  bestWayToEatImageUrl String? @map("best_way_to_eat_image_url") @db.Text
 
-  // Product Type/Tags (replaces category)
-  productType String?  @map("product_type") @db.VarChar(50)
-  tags        String[] @default([])
-
-  // Nutrition Info
-  proteinPer100g    Decimal? @map("protein_per_100g") @db.Decimal(5, 2)
-  caloriesPer100g   Int?     @map("calories_per_100g")
-  nutritionalInfo   Json?    @map("nutritional_info") @db.JsonB
-
-  // Product Features
-  features Json? @db.JsonB
-
-  // Usage Instructions / Best Ways to Eat
-  usageInstructions String? @map("usage_instructions") @db.Text
+  // Product Tags
+  tags String[] @default([])
 
   // Status
-  isActive   Boolean @default(true) @map("is_active")
-  isFeatured Boolean @default(false) @map("is_featured")
-
-  // Statistics (denormalized for performance)
-  totalSales    Int     @default(0) @map("total_sales")
-  totalReviews  Int     @default(0) @map("total_reviews")
-  averageRating Decimal @default(0.00) @map("average_rating") @db.Decimal(3, 2)
-  viewCount     Int     @default(0) @map("view_count")
+  isActive Boolean @default(true) @map("is_active")
 
   // Display Order (manual sorting)
   displayOrder Int @default(0) @map("display_order")
@@ -160,16 +144,15 @@ model Product {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  variants   ProductVariant[]
-  images     ProductImage[]
-  orderItems OrderItem[]      @relation("OrderItemToProduct")
+  variants    ProductVariant[]
+  images      ProductImage[]
+  cartImages  ProductCartImage[]
+  reviews     Review[] // Legacy reviews (pre-order system)
+  itemReviews ItemReview[] // New order-linked item reviews
+  orderItems  OrderItem[]        @relation("OrderItemToProduct")
 
   @@index([isActive], map: "products_is_active_idx")
-  @@index([isFeatured], map: "products_is_featured_idx")
-  @@index([averageRating(sort: Desc)], map: "products_average_rating_idx")
-  @@index([totalSales(sort: Desc)], map: "products_total_sales_idx")
   @@index([tags], map: "products_tags_idx", type: Gin)
-  @@index([productType], map: "products_product_type_idx")
   @@index([displayOrder], map: "products_display_order_idx")
   @@map("products")
 }
@@ -188,14 +171,13 @@ model ProductVariant {
   weight     Int    @db.Integer
   weightUnit String @default("g") @map("weight_unit") @db.VarChar(10)
 
-  // Pricing
-  mrp                 Decimal @db.Decimal(10, 2)
-  sellingPrice        Decimal @map("selling_price") @db.Decimal(10, 2)
-  discountPercentage  Decimal @default(0.00) @map("discount_percentage") @db.Decimal(5, 2)
+  // Nutrition Info
+  proteinQuantity Decimal? @map("protein_quantity") @db.Decimal(6, 2)
 
-  // Coupon (optional)
-  couponCode         String?  @map("coupon_code") @db.VarChar(50)
-  couponAppliedPrice Decimal? @map("coupon_applied_price") @db.Decimal(10, 2)
+  // Pricing
+  mrp                Decimal @db.Decimal(10, 2)
+  sellingPrice       Decimal @map("selling_price") @db.Decimal(10, 2)
+  discountPercentage Decimal @default(0.00) @map("discount_percentage") @db.Decimal(5, 2)
 
   // Inventory
   stockQuantity     Int @default(0) @map("stock_quantity") @db.Integer
@@ -213,7 +195,9 @@ model ProductVariant {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  orderItems OrderItem[] @relation("OrderItemToVariant")
+  orderItems  OrderItem[]  @relation("OrderItemToVariant")
+  reviews     Review[] // Legacy reviews (pre-order system)
+  itemReviews ItemReview[] // New order-linked item reviews
 
   @@index([productId], map: "product_variants_product_id_idx")
   @@index([isAvailable], map: "product_variants_is_available_idx")
@@ -222,16 +206,24 @@ model ProductVariant {
   @@map("product_variants")
 }
 
-// Product Images table
+// Image Device Type Enum
+enum ImageDeviceType {
+  DESKTOP
+  MOBILE
+
+  @@map("image_device_type")
+}
+
+// Product Images table (for product page display)
 model ProductImage {
   id        String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
   productId String  @map("product_id") @db.Text
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   // Image Details
-  imageUrl     String  @map("image_url") @db.Text
-  thumbnailUrl String? @map("thumbnail_url") @db.Text
-  altText      String? @map("alt_text") @db.VarChar(255)
+  imageUrl   String          @map("image_url") @db.Text
+  deviceType ImageDeviceType @map("device_type")
+  altText    String?         @map("alt_text") @db.VarChar(255)
 
   // Display
   displayOrder Int     @default(0) @map("display_order") @db.Integer
@@ -243,7 +235,281 @@ model ProductImage {
   @@index([productId], map: "product_images_product_id_idx")
   @@index([productId, isPrimary], map: "product_images_is_primary_idx")
   @@index([productId, displayOrder], map: "product_images_display_order_idx")
+  @@index([productId, deviceType], map: "product_images_device_type_idx")
   @@map("product_images")
+}
+
+// Product Cart Images table (for cart and order page display)
+model ProductCartImage {
+  id        String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  productId String  @map("product_id") @db.Text
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Image Details
+  imageUrl   String          @map("image_url") @db.Text
+  deviceType ImageDeviceType @map("device_type")
+  altText    String?         @map("alt_text") @db.VarChar(255)
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([productId], map: "product_cart_images_product_id_idx")
+  @@index([productId, deviceType], map: "product_cart_images_device_type_idx")
+  @@map("product_cart_images")
+}
+
+// ============================================
+// COUPONS SYSTEM
+// ============================================
+
+// Coupon Discount Type
+enum CouponDiscountType {
+  PERCENTAGE // e.g., 10% off
+  FIXED      // e.g., ₹100 off
+
+  @@map("coupon_discount_type")
+}
+
+// Coupon Status
+enum CouponStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  EXHAUSTED // All uses consumed
+
+  @@map("coupon_status")
+}
+
+// Main Coupons table
+model Coupon {
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  // Coupon Identification
+  code        String @unique @db.VarChar(50) // e.g., "FIRST300", "WELCOME10"
+  name        String @db.VarChar(100) // Display name, e.g., "First Order Discount"
+  description String? @db.Text // Detailed description for admin
+
+  // Discount Configuration
+  discountType  CouponDiscountType @map("discount_type")
+  discountValue Decimal            @map("discount_value") @db.Decimal(10, 2) // 10 for 10% or ₹10
+
+  // Caps and Limits
+  maxDiscountAmount Decimal? @map("max_discount_amount") @db.Decimal(10, 2) // Max discount for percentage coupons
+  minOrderAmount    Decimal? @map("min_order_amount") @db.Decimal(10, 2) // Minimum cart value to apply
+
+  // Usage Limits
+  maxTotalUses    Int?  @map("max_total_uses") @db.Integer // Total times coupon can be used (null = unlimited)
+  maxUsesPerUser  Int   @default(1) @map("max_uses_per_user") @db.Integer // Times a single user can use
+  currentUseCount Int   @default(0) @map("current_use_count") @db.Integer // Track total uses
+
+  // Validity Period
+  validFrom DateTime  @map("valid_from")
+  validUntil DateTime @map("valid_until")
+
+  // Targeting (optional restrictions)
+  isFirstOrderOnly Boolean  @default(false) @map("is_first_order_only") // Only for first-time buyers
+  applicableProducts String[] @default([]) @map("applicable_products") // Product IDs (empty = all products)
+  applicableTags     String[] @default([]) @map("applicable_tags") // Product tags (empty = all)
+
+  // Status
+  status   CouponStatus @default(ACTIVE)
+  isPublic Boolean      @default(true) @map("is_public") // Show in promotions or hidden/private
+
+  // Metadata
+  createdBy String? @map("created_by") @db.VarChar(100) // Admin who created
+  metadata  Json?   @db.JsonB
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  usages CouponUsage[]
+
+  @@index([code], map: "coupons_code_idx")
+  @@index([status], map: "coupons_status_idx")
+  @@index([validFrom, validUntil], map: "coupons_validity_idx")
+  @@index([isFirstOrderOnly], map: "coupons_first_order_idx")
+  @@map("coupons")
+}
+
+// Coupon Usage History - Tracks who used which coupon and when
+model CouponUsage {
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  // Coupon Reference
+  couponId String @map("coupon_id") @db.Text
+  coupon   Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  // User who used the coupon
+  userId String @map("user_id") @db.Text
+
+  // Order where coupon was applied
+  orderId String @map("order_id") @db.Text
+
+  // Discount Applied
+  discountAmount Decimal @map("discount_amount") @db.Decimal(10, 2) // Actual discount given
+  orderAmount    Decimal @map("order_amount") @db.Decimal(10, 2) // Order total before discount
+
+  // Timestamp
+  usedAt DateTime @default(now()) @map("used_at")
+
+  @@unique([couponId, orderId], map: "coupon_usage_coupon_order_unique")
+  @@index([couponId], map: "coupon_usage_coupon_id_idx")
+  @@index([userId], map: "coupon_usage_user_id_idx")
+  @@index([orderId], map: "coupon_usage_order_id_idx")
+  @@index([userId, couponId], map: "coupon_usage_user_coupon_idx")
+  @@map("coupon_usages")
+}
+
+// ============================================
+// REVIEWS SYSTEM
+// ============================================
+
+// Legacy Product Reviews table (pre-order system reviews)
+// Kept for backward compatibility with existing review data
+model Review {
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  productId String  @map("product_id") @db.Text
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  variantId String?         @map("variant_id") @db.Text
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  // Reviewer Information
+  reviewerName  String  @map("reviewer_name") @db.VarChar(150)
+  reviewerEmail String? @map("reviewer_email") @db.VarChar(255)
+
+  // Review Content
+  rating  Int     @db.Integer
+  title   String? @db.VarChar(255)
+  comment String  @db.Text
+
+  // Verification & Status
+  isVerifiedPurchase Boolean @default(false) @map("is_verified_purchase")
+  isApproved         Boolean @default(false) @map("is_approved")
+
+  // Helpfulness
+  helpfulCount   Int @default(0) @map("helpful_count")
+  unhelpfulCount Int @default(0) @map("unhelpful_count")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([productId], map: "reviews_product_id_idx")
+  @@index([variantId], map: "reviews_variant_id_idx")
+  @@index([productId, isApproved], map: "reviews_product_approved_idx")
+  @@index([rating], map: "reviews_rating_idx")
+  @@index([createdAt(sort: Desc)], map: "reviews_created_at_idx")
+  @@map("reviews")
+}
+
+// Order Review - Review for the entire order experience (delivery, packaging, service)
+// One review per order per customer
+model OrderReview {
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  // Order being reviewed
+  orderId String @unique @map("order_id") @db.Text
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // User who is reviewing (must be the order owner)
+  userId String @map("user_id") @db.Text
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Overall Rating (1-5)
+  overallRating Int @map("overall_rating") @db.Integer
+
+  // Specific Ratings (1-5, optional)
+  deliveryRating  Int? @map("delivery_rating") @db.Integer
+  packagingRating Int? @map("packaging_rating") @db.Integer
+  serviceRating   Int? @map("service_rating") @db.Integer
+
+  // Review Content
+  title   String? @db.VarChar(255)
+  comment String? @db.Text
+
+  // Review Images (URLs stored as array)
+  imageUrls String[] @default([]) @map("image_urls")
+
+  // Moderation & Status
+  isApproved      Boolean   @default(false) @map("is_approved")
+  moderationNotes String?   @map("moderation_notes") @db.Text
+  moderatedAt     DateTime? @map("moderated_at")
+  moderatedBy     String?   @map("moderated_by") @db.VarChar(100)
+
+  // Helpfulness
+  helpfulCount   Int @default(0) @map("helpful_count")
+  unhelpfulCount Int @default(0) @map("unhelpful_count")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId], map: "order_reviews_user_id_idx")
+  @@index([isApproved], map: "order_reviews_is_approved_idx")
+  @@index([overallRating], map: "order_reviews_rating_idx")
+  @@index([createdAt(sort: Desc)], map: "order_reviews_created_at_idx")
+  @@map("order_reviews")
+}
+
+// Item Review - Review for individual items in an order
+// One review per order item per customer
+model ItemReview {
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  // Order Item being reviewed
+  orderItemId String    @unique @map("order_item_id") @db.Text
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  // Product reference (for aggregating product reviews)
+  productId String  @map("product_id") @db.Text
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Variant reference (optional, for variant-specific reviews)
+  variantId String?         @map("variant_id") @db.Text
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  // User who is reviewing
+  userId String @map("user_id") @db.Text
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Rating (1-5)
+  rating Int @db.Integer
+
+  // Review Content
+  title   String? @db.VarChar(255)
+  comment String? @db.Text
+
+  // Review Images (URLs stored as array)
+  imageUrls String[] @default([]) @map("image_urls")
+
+  // Verified Purchase (always true since linked to order item)
+  isVerifiedPurchase Boolean @default(true) @map("is_verified_purchase")
+
+  // Moderation & Status
+  isApproved      Boolean   @default(false) @map("is_approved")
+  moderationNotes String?   @map("moderation_notes") @db.Text
+  moderatedAt     DateTime? @map("moderated_at")
+  moderatedBy     String?   @map("moderated_by") @db.VarChar(100)
+
+  // Helpfulness
+  helpfulCount   Int @default(0) @map("helpful_count")
+  unhelpfulCount Int @default(0) @map("unhelpful_count")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([productId], map: "item_reviews_product_id_idx")
+  @@index([variantId], map: "item_reviews_variant_id_idx")
+  @@index([userId], map: "item_reviews_user_id_idx")
+  @@index([productId, isApproved], map: "item_reviews_product_approved_idx")
+  @@index([rating], map: "item_reviews_rating_idx")
+  @@index([createdAt(sort: Desc)], map: "item_reviews_created_at_idx")
+  @@map("item_reviews")
 }
 
 // ============================================
@@ -301,47 +567,47 @@ enum DeliveryType {
 
 // Main Orders table
 model Order {
-  id             String      @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
 
   // Order Identification
-  orderNumber    String      @unique @map("order_number") @db.VarChar(50)
+  orderNumber String @unique @map("order_number") @db.VarChar(50)
 
   // User Information
-  userId         String      @map("user_id") @db.Text
-  user           User        @relation("UserToOrders", fields: [userId], references: [id], onDelete: Restrict)
+  userId String @map("user_id") @db.Text
+  user   User   @relation("UserToOrders", fields: [userId], references: [id], onDelete: Restrict)
 
   // Order Status
-  status         OrderStatus @default(PENDING)
+  status OrderStatus @default(PENDING)
 
   // Pricing Details
-  subtotal       Decimal     @db.Decimal(10, 2)
-  discountAmount Decimal     @default(0.00) @map("discount_amount") @db.Decimal(10, 2)
-  couponDiscount Decimal     @default(0.00) @map("coupon_discount") @db.Decimal(10, 2)
-  couponCode     String?     @map("coupon_code") @db.VarChar(50)
-  taxAmount      Decimal     @default(0.00) @map("tax_amount") @db.Decimal(10, 2)
-  deliveryFee    Decimal     @default(0.00) @map("delivery_fee") @db.Decimal(10, 2)
-  totalAmount    Decimal     @map("total_amount") @db.Decimal(10, 2)
+  subtotal       Decimal @db.Decimal(10, 2)
+  discountAmount Decimal @default(0.00) @map("discount_amount") @db.Decimal(10, 2)
+  couponDiscount Decimal @default(0.00) @map("coupon_discount") @db.Decimal(10, 2)
+  couponCode     String? @map("coupon_code") @db.VarChar(50)
+  taxAmount      Decimal @default(0.00) @map("tax_amount") @db.Decimal(10, 2)
+  deliveryFee    Decimal @default(0.00) @map("delivery_fee") @db.Decimal(10, 2)
+  totalAmount    Decimal @map("total_amount") @db.Decimal(10, 2)
 
   // Delivery Information
-  deliveryType        DeliveryType    @default(STANDARD) @map("delivery_type")
-  shippingAddressLine1 String         @map("shipping_address_line1") @db.VarChar(255)
-  shippingAddressLine2 String?        @map("shipping_address_line2") @db.VarChar(255)
-  shippingCity         String         @map("shipping_city") @db.VarChar(100)
-  shippingState        String         @map("shipping_state") @db.VarChar(100)
-  shippingPostalCode   String         @map("shipping_postal_code") @db.VarChar(20)
-  shippingCountry      String         @default("India") @map("shipping_country") @db.VarChar(100)
+  deliveryType         DeliveryType @default(STANDARD) @map("delivery_type")
+  shippingAddressLine1 String       @map("shipping_address_line1") @db.VarChar(255)
+  shippingAddressLine2 String?      @map("shipping_address_line2") @db.VarChar(255)
+  shippingCity         String       @map("shipping_city") @db.VarChar(100)
+  shippingState        String       @map("shipping_state") @db.VarChar(100)
+  shippingPostalCode   String       @map("shipping_postal_code") @db.VarChar(20)
+  shippingCountry      String       @default("India") @map("shipping_country") @db.VarChar(100)
 
   // Contact Information
-  customerName  String  @map("customer_name") @db.VarChar(200)
-  customerEmail String  @map("customer_email") @db.VarChar(255)
-  customerPhone String  @map("customer_phone") @db.VarChar(20)
+  customerName  String @map("customer_name") @db.VarChar(200)
+  customerEmail String @map("customer_email") @db.VarChar(255)
+  customerPhone String @map("customer_phone") @db.VarChar(20)
 
   // Courier/Shipping Tracking
-  externalOrderId String?   @unique @map("external_order_id") @db.VarChar(100)
-  trackingNumber  String?   @unique @map("tracking_number") @db.VarChar(100)
-  courierName     String?   @map("courier_name") @db.VarChar(100)
-  shippedAt       DateTime? @map("shipped_at")
-  deliveredAt     DateTime? @map("delivered_at")
+  externalOrderId   String?   @unique @map("external_order_id") @db.VarChar(100)
+  trackingNumber    String?   @unique @map("tracking_number") @db.VarChar(100)
+  courierName       String?   @map("courier_name") @db.VarChar(100)
+  shippedAt         DateTime? @map("shipped_at")
+  deliveredAt       DateTime? @map("delivered_at")
   estimatedDelivery DateTime? @map("estimated_delivery")
 
   // Order Lifecycle Timestamps
@@ -353,11 +619,11 @@ model Order {
   cancelledBy        String? @map("cancelled_by") @db.VarChar(50)
 
   // Special Instructions
-  orderNotes     String? @map("order_notes") @db.Text
-  deliveryNotes  String? @map("delivery_notes") @db.Text
+  orderNotes    String? @map("order_notes") @db.Text
+  deliveryNotes String? @map("delivery_notes") @db.Text
 
   // Metadata
-  metadata       Json?   @db.JsonB
+  metadata Json? @db.JsonB
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -367,6 +633,7 @@ model Order {
   items         OrderItem[]
   payments      Payment[]
   statusHistory OrderStatusHistory[]
+  review        OrderReview?
 
   @@index([userId], map: "orders_user_id_idx")
   @@index([status], map: "orders_status_idx")
@@ -381,37 +648,40 @@ model Order {
 
 // Order Items table
 model OrderItem {
-  id        String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
 
-  orderId   String @map("order_id") @db.Text
-  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String @map("order_id") @db.Text
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   // Product Information
-  productId        String  @map("product_id") @db.Text
-  product          Product @relation("OrderItemToProduct", fields: [productId], references: [id], onDelete: Restrict)
+  productId String  @map("product_id") @db.Text
+  product   Product @relation("OrderItemToProduct", fields: [productId], references: [id], onDelete: Restrict)
 
-  variantId        String  @map("variant_id") @db.Text
-  variant          ProductVariant @relation("OrderItemToVariant", fields: [variantId], references: [id], onDelete: Restrict)
+  variantId String         @map("variant_id") @db.Text
+  variant   ProductVariant @relation("OrderItemToVariant", fields: [variantId], references: [id], onDelete: Restrict)
 
   // Snapshot of product details at time of order
-  productName      String  @map("product_name") @db.VarChar(255)
-  productSlug      String  @map("product_slug") @db.VarChar(255)
-  variantSku       String  @map("variant_sku") @db.VarChar(100)
-  variantWeight    Int     @map("variant_weight")
+  productName       String @map("product_name") @db.VarChar(255)
+  productSlug       String @map("product_slug") @db.VarChar(255)
+  variantSku        String @map("variant_sku") @db.VarChar(100)
+  variantWeight     Int    @map("variant_weight")
   variantWeightUnit String @map("variant_weight_unit") @db.VarChar(10)
 
   // Pricing snapshot at time of order
-  quantity          Int     @db.Integer
-  unitPrice         Decimal @map("unit_price") @db.Decimal(10, 2)
-  unitMrp           Decimal @map("unit_mrp") @db.Decimal(10, 2)
-  discountPerUnit   Decimal @default(0.00) @map("discount_per_unit") @db.Decimal(10, 2)
-  totalPrice        Decimal @map("total_price") @db.Decimal(10, 2)
+  quantity        Int     @db.Integer
+  unitPrice       Decimal @map("unit_price") @db.Decimal(10, 2)
+  unitMrp         Decimal @map("unit_mrp") @db.Decimal(10, 2)
+  discountPerUnit Decimal @default(0.00) @map("discount_per_unit") @db.Decimal(10, 2)
+  totalPrice      Decimal @map("total_price") @db.Decimal(10, 2)
 
   // Product image snapshot
   productImageUrl String? @map("product_image_url") @db.Text
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  review ItemReview?
 
   @@index([orderId], map: "order_items_order_id_idx")
   @@index([productId], map: "order_items_product_id_idx")
@@ -421,39 +691,39 @@ model OrderItem {
 
 // Payment table
 model Payment {
-  id        String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
 
-  orderId   String  @map("order_id") @db.Text
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String @map("order_id") @db.Text
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   // Payment Details
-  paymentMethod    PaymentMethod  @map("payment_method")
-  paymentStatus    PaymentStatus  @default(PENDING) @map("payment_status")
-  amount           Decimal        @db.Decimal(10, 2)
-  currency         String         @default("INR") @db.VarChar(10)
+  paymentMethod PaymentMethod @map("payment_method")
+  paymentStatus PaymentStatus @default(PENDING) @map("payment_status")
+  amount        Decimal       @db.Decimal(10, 2)
+  currency      String        @default("INR") @db.VarChar(10)
 
   // Payment Gateway Information
-  paymentGateway      String?  @map("payment_gateway") @db.VarChar(50)
-  gatewayOrderId      String?  @unique @map("gateway_order_id") @db.VarChar(100)
-  gatewayPaymentId    String?  @unique @map("gateway_payment_id") @db.VarChar(100)
-  gatewaySignature    String?  @map("gateway_signature") @db.Text
+  paymentGateway   String? @map("payment_gateway") @db.VarChar(50)
+  gatewayOrderId   String? @unique @map("gateway_order_id") @db.VarChar(100)
+  gatewayPaymentId String? @unique @map("gateway_payment_id") @db.VarChar(100)
+  gatewaySignature String? @map("gateway_signature") @db.Text
 
   // Transaction Details
-  transactionId    String?   @unique @map("transaction_id") @db.VarChar(100)
-  transactionDate  DateTime? @map("transaction_date")
+  transactionId   String?   @unique @map("transaction_id") @db.VarChar(100)
+  transactionDate DateTime? @map("transaction_date")
 
   // Refund Information
-  refundAmount     Decimal?  @default(0.00) @map("refund_amount") @db.Decimal(10, 2)
-  refundedAt       DateTime? @map("refunded_at")
-  refundReason     String?   @map("refund_reason") @db.Text
-  refundReference  String?   @map("refund_reference") @db.VarChar(100)
+  refundAmount    Decimal?  @default(0.00) @map("refund_amount") @db.Decimal(10, 2)
+  refundedAt      DateTime? @map("refunded_at")
+  refundReason    String?   @map("refund_reason") @db.Text
+  refundReference String?   @map("refund_reference") @db.VarChar(100)
 
   // Failure Information
-  failureReason    String?   @map("failure_reason") @db.Text
-  failureCode      String?   @map("failure_code") @db.VarChar(50)
+  failureReason String? @map("failure_reason") @db.Text
+  failureCode   String? @map("failure_code") @db.VarChar(50)
 
   // Additional Details
-  paymentMetadata  Json?     @db.JsonB
+  paymentMetadata Json? @db.JsonB
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -469,22 +739,22 @@ model Payment {
 
 // Order Status History
 model OrderStatusHistory {
-  id        String   @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
 
-  orderId   String   @map("order_id") @db.Text
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String @map("order_id") @db.Text
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   // Status Change Details
   fromStatus OrderStatus? @map("from_status")
   toStatus   OrderStatus  @map("to_status")
 
   // Change Context
-  changedBy  String?  @map("changed_by") @db.VarChar(50)
-  reason     String?  @db.Text
-  notes      String?  @db.Text
+  changedBy String? @map("changed_by") @db.VarChar(50)
+  reason    String? @db.Text
+  notes     String? @db.Text
 
   // Metadata
-  metadata   Json?    @db.JsonB
+  metadata Json? @db.JsonB
 
   // Timestamp
   createdAt DateTime @default(now()) @map("created_at")
