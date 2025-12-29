@@ -128,7 +128,8 @@ jobs:
           APP_PORT=8080,\
           NODE_ENV=production,\
           FRONTEND_URL=${{ secrets.FRONTEND_URL }},\
-          GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}"
+          GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }},\
+          INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }}"
 
       - name: Get Service URL
         run: |
