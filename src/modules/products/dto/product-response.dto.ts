@@ -1,3 +1,11 @@
+export class RatingDistributionDto {
+  1: number;
+  2: number;
+  3: number;
+  4: number;
+  5: number;
+}
+
 export class ProductVariantResponseDto {
   id: string;
   sku: string;
@@ -10,6 +18,10 @@ export class ProductVariantResponseDto {
   stockQuantity: number;
   isAvailable: boolean;
   isDefault: boolean;
+  // Rating fields
+  averageRating: number;
+  totalReviews: number;
+  ratingDistribution: RatingDistributionDto;
 }
 
 export class ProductImageResponseDto {
@@ -40,6 +52,8 @@ export class ProductResponseDto {
   tags: string[];
   isActive: boolean;
   displayOrder: number;
+  averageRating?: number;
+  totalReviews?: number;
   variants?: ProductVariantResponseDto[];
   images?: ProductImageResponseDto[];
   cartImages?: ProductCartImageResponseDto[];

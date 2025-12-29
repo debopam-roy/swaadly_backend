@@ -136,6 +136,50 @@ export class ProductsService {
   }
 
   private mapToResponseDto(product: any): ProductResponseDto {
+    const variants = product.variants?.map((variant: any) => ({
+      id: variant.id,
+      sku: variant.sku,
+      weight: variant.weight,
+      weightUnit: variant.weightUnit,
+      proteinQuantity: variant.proteinQuantity
+        ? parseFloat(variant.proteinQuantity)
+        : undefined,
+      mrp: parseFloat(variant.mrp),
+      sellingPrice: parseFloat(variant.sellingPrice),
+      discountPercentage: parseFloat(variant.discountPercentage),
+      stockQuantity: variant.stockQuantity,
+      isAvailable: variant.isAvailable,
+      isDefault: variant.isDefault,
+      // Rating fields
+      averageRating: variant.averageRating
+        ? parseFloat(variant.averageRating)
+        : 0,
+      totalReviews: variant.totalReviews || 0,
+      ratingDistribution: variant.ratingDistribution || {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0,
+        5: 0,
+      },
+    }));
+
+    // Calculate product-level aggregated ratings from all variants
+    let totalRating = 0;
+    let totalReviewsCount = 0;
+
+    variants?.forEach((variant) => {
+      if (variant.totalReviews > 0) {
+        totalRating += variant.averageRating * variant.totalReviews;
+        totalReviewsCount += variant.totalReviews;
+      }
+    });
+
+    const productAverageRating =
+      totalReviewsCount > 0
+        ? Math.round((totalRating / totalReviewsCount) * 10) / 10
+        : undefined;
+
     return {
       id: product.id,
       name: product.name,
@@ -148,21 +192,9 @@ export class ProductsService {
       tags: product.tags,
       isActive: product.isActive,
       displayOrder: product.displayOrder,
-      variants: product.variants?.map((variant: any) => ({
-        id: variant.id,
-        sku: variant.sku,
-        weight: variant.weight,
-        weightUnit: variant.weightUnit,
-        proteinQuantity: variant.proteinQuantity
-          ? parseFloat(variant.proteinQuantity)
-          : undefined,
-        mrp: parseFloat(variant.mrp),
-        sellingPrice: parseFloat(variant.sellingPrice),
-        discountPercentage: parseFloat(variant.discountPercentage),
-        stockQuantity: variant.stockQuantity,
-        isAvailable: variant.isAvailable,
-        isDefault: variant.isDefault,
-      })),
+      averageRating: productAverageRating,
+      totalReviews: totalReviewsCount > 0 ? totalReviewsCount : undefined,
+      variants,
       images: product.images?.map((image: any) => ({
         id: image.id,
         imageUrl: image.imageUrl,

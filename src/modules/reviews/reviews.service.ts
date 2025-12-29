@@ -1,11 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueryReviewsDto, ReviewSortBy } from './dto/query-reviews.dto';
 import { ReviewResponseDto } from './dto/review-response.dto';
 import { generateInitialsAvatar } from '../../common/utils/avatar.util';
+import {
+  CalculateRatingsResponseDto,
+  VariantRatingDto,
+  RatingDistributionDto,
+} from './dto/variant-rating.dto';
 
 @Injectable()
 export class ReviewsService {
+  private readonly logger = new Logger(ReviewsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: QueryReviewsDto): Promise<{
@@ -117,6 +124,167 @@ export class ReviewsService {
       variantId: review.variantId,
       createdAt: review.createdAt,
       updatedAt: review.updatedAt,
+    };
+  }
+
+  /**
+   * Calculate and update average ratings for all product variants
+   * Combines both legacy reviews and item reviews (verified purchases)
+   * Following SOLID principles - Single Responsibility
+   */
+  async calculateAndUpdateRatings(): Promise<CalculateRatingsResponseDto> {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+
+    this.logger.log('='.repeat(80));
+    this.logger.log('🚀 RATING CALCULATION SERVICE STARTED');
+    this.logger.log(`⏰ Timestamp: ${timestamp}`);
+    this.logger.log('='.repeat(80));
+
+    try {
+      // Get all product variants
+      this.logger.log('📊 Fetching all product variants from database...');
+      const variants = await this.prisma.productVariant.findMany({
+        select: { id: true },
+      });
+
+      this.logger.log(`✅ Found ${variants.length} product variants to process`);
+
+      const variantRatings: VariantRatingDto[] = [];
+      let processedCount = 0;
+      let skippedCount = 0;
+
+      // Process each variant sequentially to avoid database connection issues
+      for (const variant of variants) {
+        processedCount++;
+
+        // Log progress every 10 variants
+        if (processedCount % 10 === 0) {
+          this.logger.log(
+            `📈 Progress: ${processedCount}/${variants.length} variants processed`,
+          );
+        }
+
+        const variantRating = await this.calculateVariantRating(variant.id);
+        if (variantRating) {
+          variantRatings.push(variantRating);
+        } else {
+          skippedCount++;
+        }
+      }
+
+      const duration = Date.now() - startTime;
+      const durationSeconds = (duration / 1000).toFixed(2);
+
+      this.logger.log('='.repeat(80));
+      this.logger.log('✅ RATING CALCULATION SERVICE COMPLETED SUCCESSFULLY');
+      this.logger.log(`📊 Total variants: ${variants.length}`);
+      this.logger.log(`✨ Variants updated: ${variantRatings.length}`);
+      this.logger.log(`⏭️  Variants skipped (no reviews): ${skippedCount}`);
+      this.logger.log(`⏱️  Execution time: ${durationSeconds}s`);
+      this.logger.log(`⏰ Completed at: ${new Date().toISOString()}`);
+      this.logger.log('='.repeat(80));
+
+      return {
+        success: true,
+        message: 'Ratings calculated and updated successfully',
+        updatedVariantsCount: variantRatings.length,
+        variantRatings,
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const durationSeconds = (duration / 1000).toFixed(2);
+
+      this.logger.log('='.repeat(80));
+      this.logger.error('❌ RATING CALCULATION SERVICE FAILED');
+      this.logger.error(`⏱️  Failed after: ${durationSeconds}s`);
+      this.logger.error(`⏰ Failed at: ${new Date().toISOString()}`);
+      this.logger.error(`🔥 Error: ${error.message}`);
+      this.logger.error('='.repeat(80));
+
+      throw error;
+    }
+  }
+
+  /**
+   * Calculate rating for a single variant
+   * DRY principle - reusable method for single variant calculation
+   * @param variantId - The variant ID to calculate rating for
+   * @returns VariantRatingDto if reviews exist, null otherwise
+   */
+  private async calculateVariantRating(
+    variantId: string,
+  ): Promise<VariantRatingDto | null> {
+    // Fetch all approved reviews for this variant from both sources
+    // Using Promise.all for parallel queries - performance optimization
+    const [legacyReviews, itemReviews] = await Promise.all([
+      this.prisma.review.findMany({
+        where: {
+          variantId,
+          isApproved: true,
+        },
+        select: { rating: true },
+      }),
+      this.prisma.itemReview.findMany({
+        where: {
+          variantId,
+          isApproved: true,
+        },
+        select: { rating: true },
+      }),
+    ]);
+
+    // Combine ratings from both sources
+    const allRatings = [
+      ...legacyReviews.map((r) => r.rating),
+      ...itemReviews.map((r) => r.rating),
+    ];
+
+    // Skip if no reviews exist for this variant
+    if (allRatings.length === 0) {
+      // Reset rating fields to defaults
+      await this.prisma.productVariant.update({
+        where: { id: variantId },
+        data: {
+          averageRating: 0,
+          totalReviews: 0,
+          ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+        },
+      });
+      return null;
+    }
+
+    // Calculate average rating (exactly 1 decimal place)
+    const sum = allRatings.reduce((acc, rating) => acc + rating, 0);
+    const averageRating = sum / allRatings.length;
+
+    // Round to exactly 1 decimal place
+    const roundedAverage = Math.round(averageRating * 10) / 10;
+
+    // Calculate rating distribution
+    const distribution: RatingDistributionDto = {
+      1: allRatings.filter((r) => r === 1).length,
+      2: allRatings.filter((r) => r === 2).length,
+      3: allRatings.filter((r) => r === 3).length,
+      4: allRatings.filter((r) => r === 4).length,
+      5: allRatings.filter((r) => r === 5).length,
+    };
+
+    // Update the variant with calculated values
+    await this.prisma.productVariant.update({
+      where: { id: variantId },
+      data: {
+        averageRating: roundedAverage,
+        totalReviews: allRatings.length,
+        ratingDistribution: distribution as any,
+      },
+    });
+
+    return {
+      variantId,
+      averageRating: roundedAverage,
+      totalReviews: allRatings.length,
+      ratingDistribution: distribution,
     };
   }
 }

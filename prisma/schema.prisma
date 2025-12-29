@@ -190,6 +190,11 @@ model ProductVariant {
   // Display Order
   displayOrder Int @default(0) @map("display_order") @db.Integer
 
+  // Rating Aggregation (denormalized for performance)
+  averageRating       Decimal? @default(0.0) @map("average_rating") @db.Decimal(2, 1)
+  totalReviews        Int      @default(0) @map("total_reviews") @db.Integer
+  ratingDistribution  Json?    @default("{}") @map("rating_distribution") @db.JsonB
+
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -203,6 +208,7 @@ model ProductVariant {
   @@index([isAvailable], map: "product_variants_is_available_idx")
   @@index([stockQuantity], map: "product_variants_stock_idx")
   @@index([productId, isDefault], map: "product_variants_is_default_idx")
+  @@index([averageRating], map: "product_variants_avg_rating_idx")
   @@map("product_variants")
 }
 
@@ -864,4 +870,41 @@ model ShipmentTrackingEvent {
   @@index([timestamp], map: "shipment_tracking_events_timestamp_idx")
   @@index([shipmentId, timestamp(sort: Desc)], map: "shipment_tracking_events_shipment_timestamp_idx")
   @@map("shipment_tracking_events")
+}
+
+// ============================================
+// NEWSLETTER SYSTEM
+// ============================================
+
+// Newsletter Subscribers table - Stores users who subscribed to newsletter
+model NewsletterSubscriber {
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  // Subscriber Information
+  email String @unique @db.VarChar(255)
+
+  // Subscription Status - Soft delete approach
+  isSubscribed Boolean @default(true) @map("is_subscribed") // Can receive emails
+  isActive     Boolean @default(true) @map("is_active") // Account active status
+
+  // Preferences
+  preferences Json @default("{}") @db.JsonB // Future: email frequency, topics of interest
+
+  // Subscription Source
+  source String? @db.VarChar(50) // e.g., "footer", "checkout", "popup"
+
+  // Metadata
+  metadata Json? @db.JsonB
+
+  // Timestamps
+  subscribedAt   DateTime  @default(now()) @map("subscribed_at")
+  unsubscribedAt DateTime? @map("unsubscribed_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([email], map: "newsletter_subscribers_email_idx")
+  @@index([isSubscribed], map: "newsletter_subscribers_is_subscribed_idx")
+  @@index([isActive], map: "newsletter_subscribers_is_active_idx")
+  @@index([isSubscribed, isActive], map: "newsletter_subscribers_active_idx")
+  @@index([subscribedAt(sort: Desc)], map: "newsletter_subscribers_subscribed_at_idx")
+  @@map("newsletter_subscribers")
 }
