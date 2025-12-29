@@ -136,19 +136,13 @@ export class ReviewsService {
     const startTime = Date.now();
     const timestamp = new Date().toISOString();
 
-    this.logger.log('='.repeat(80));
-    this.logger.log('🚀 RATING CALCULATION SERVICE STARTED');
-    this.logger.log(`⏰ Timestamp: ${timestamp}`);
-    this.logger.log('='.repeat(80));
 
     try {
       // Get all product variants
-      this.logger.log('📊 Fetching all product variants from database...');
       const variants = await this.prisma.productVariant.findMany({
         select: { id: true },
       });
 
-      this.logger.log(`✅ Found ${variants.length} product variants to process`);
 
       const variantRatings: VariantRatingDto[] = [];
       let processedCount = 0;
@@ -158,13 +152,6 @@ export class ReviewsService {
       for (const variant of variants) {
         processedCount++;
 
-        // Log progress every 10 variants
-        if (processedCount % 10 === 0) {
-          this.logger.log(
-            `📈 Progress: ${processedCount}/${variants.length} variants processed`,
-          );
-        }
-
         const variantRating = await this.calculateVariantRating(variant.id);
         if (variantRating) {
           variantRatings.push(variantRating);
@@ -173,17 +160,7 @@ export class ReviewsService {
         }
       }
 
-      const duration = Date.now() - startTime;
-      const durationSeconds = (duration / 1000).toFixed(2);
 
-      this.logger.log('='.repeat(80));
-      this.logger.log('✅ RATING CALCULATION SERVICE COMPLETED SUCCESSFULLY');
-      this.logger.log(`📊 Total variants: ${variants.length}`);
-      this.logger.log(`✨ Variants updated: ${variantRatings.length}`);
-      this.logger.log(`⏭️  Variants skipped (no reviews): ${skippedCount}`);
-      this.logger.log(`⏱️  Execution time: ${durationSeconds}s`);
-      this.logger.log(`⏰ Completed at: ${new Date().toISOString()}`);
-      this.logger.log('='.repeat(80));
 
       return {
         success: true,
@@ -192,16 +169,6 @@ export class ReviewsService {
         variantRatings,
       };
     } catch (error) {
-      const duration = Date.now() - startTime;
-      const durationSeconds = (duration / 1000).toFixed(2);
-
-      this.logger.log('='.repeat(80));
-      this.logger.error('❌ RATING CALCULATION SERVICE FAILED');
-      this.logger.error(`⏱️  Failed after: ${durationSeconds}s`);
-      this.logger.error(`⏰ Failed at: ${new Date().toISOString()}`);
-      this.logger.error(`🔥 Error: ${error.message}`);
-      this.logger.error('='.repeat(80));
-
       throw error;
     }
   }
