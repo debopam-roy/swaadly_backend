@@ -2,6 +2,7 @@ export class ReviewResponseDto {
   id: string;
   reviewerName: string;
   reviewerEmail?: string;
+  reviewerAvatarUrl?: string;
   rating: number;
   title?: string;
   comment: string;

@@ -9,6 +9,7 @@ import {
   VerifyAuthResponse,
 } from './interfaces/auth-strategy.interface';
 import { ERROR_MESSAGES } from '../../../common/constants';
+import { generateInitialsAvatar } from '../../../common/utils/avatar.util';
 
 @Injectable()
 export class PhoneAuthStrategy implements IAuthStrategy {
@@ -63,6 +64,17 @@ export class PhoneAuthStrategy implements IAuthStrategy {
         emailVerified: false,
       });
       this.logger.debug(`New auth created with phone: ${phone}`);
+
+      // Generate initial avatar from phone number
+      if (auth.user) {
+        const displayName = `User${phone.slice(-4)}`; // Use last 4 digits
+        const avatarUrl = generateInitialsAvatar({ name: displayName });
+
+        await this.usersService.updateUserProfile(auth.id, {
+          displayName,
+          avatarUrl,
+        });
+      }
     } else {
       // Update existing auth to mark phone as verified
       await this.usersService.update(auth.id, { phoneVerified: true });

@@ -9,6 +9,7 @@ import {
   VerifyAuthResponse,
 } from './interfaces/auth-strategy.interface';
 import { ERROR_MESSAGES } from '../../../common/constants';
+import { generateInitialsAvatar } from '../../../common/utils/avatar.util';
 
 @Injectable()
 export class EmailAuthStrategy implements IAuthStrategy {
@@ -63,6 +64,17 @@ export class EmailAuthStrategy implements IAuthStrategy {
         phoneVerified: false,
       });
       this.logger.debug(`New auth created with email: ${email}`);
+
+      // Generate initial avatar from email username
+      if (auth.user) {
+        const displayName = email.split('@')[0];
+        const avatarUrl = generateInitialsAvatar({ name: displayName });
+
+        await this.usersService.updateUserProfile(auth.id, {
+          displayName,
+          avatarUrl,
+        });
+      }
     } else {
       // Update existing auth to mark email as verified
       await this.usersService.update(auth.id, { emailVerified: true });

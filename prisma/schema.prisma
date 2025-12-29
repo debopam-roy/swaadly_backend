@@ -265,7 +265,7 @@ model ProductCartImage {
 // Coupon Discount Type
 enum CouponDiscountType {
   PERCENTAGE // e.g., 10% off
-  FIXED      // e.g., ₹100 off
+  FIXED // e.g., ₹100 off
 
   @@map("coupon_discount_type")
 }
@@ -285,8 +285,8 @@ model Coupon {
   id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
 
   // Coupon Identification
-  code        String @unique @db.VarChar(50) // e.g., "FIRST300", "WELCOME10"
-  name        String @db.VarChar(100) // Display name, e.g., "First Order Discount"
+  code        String  @unique @db.VarChar(50) // e.g., "FIRST300", "WELCOME10"
+  name        String  @db.VarChar(100) // Display name, e.g., "First Order Discount"
   description String? @db.Text // Detailed description for admin
 
   // Discount Configuration
@@ -298,16 +298,16 @@ model Coupon {
   minOrderAmount    Decimal? @map("min_order_amount") @db.Decimal(10, 2) // Minimum cart value to apply
 
   // Usage Limits
-  maxTotalUses    Int?  @map("max_total_uses") @db.Integer // Total times coupon can be used (null = unlimited)
-  maxUsesPerUser  Int   @default(1) @map("max_uses_per_user") @db.Integer // Times a single user can use
-  currentUseCount Int   @default(0) @map("current_use_count") @db.Integer // Track total uses
+  maxTotalUses    Int? @map("max_total_uses") @db.Integer // Total times coupon can be used (null = unlimited)
+  maxUsesPerUser  Int  @default(1) @map("max_uses_per_user") @db.Integer // Times a single user can use
+  currentUseCount Int  @default(0) @map("current_use_count") @db.Integer // Track total uses
 
   // Validity Period
-  validFrom DateTime  @map("valid_from")
+  validFrom  DateTime @map("valid_from")
   validUntil DateTime @map("valid_until")
 
   // Targeting (optional restrictions)
-  isFirstOrderOnly Boolean  @default(false) @map("is_first_order_only") // Only for first-time buyers
+  isFirstOrderOnly   Boolean  @default(false) @map("is_first_order_only") // Only for first-time buyers
   applicableProducts String[] @default([]) @map("applicable_products") // Product IDs (empty = all products)
   applicableTags     String[] @default([]) @map("applicable_tags") // Product tags (empty = all)
 
@@ -762,4 +762,106 @@ model OrderStatusHistory {
   @@index([orderId], map: "order_status_history_order_id_idx")
   @@index([orderId, createdAt(sort: Desc)], map: "order_status_history_order_created_idx")
   @@map("order_status_history")
+}
+
+// ============================================
+// SHIPPING SYSTEM
+// ============================================
+
+// Carrier Type Enum
+enum CarrierType {
+  SHIPMOZO
+  DELHIVERY
+  DTDC
+  PUSHPAK
+
+  @@map("carrier_type")
+}
+
+// Shipment Status Enum
+enum ShipmentStatus {
+  PENDING
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  RETURNED
+  FAILED
+  UNKNOWN
+
+  @@map("shipment_status")
+}
+
+// Shipments table - Tracks all shipments created via carriers
+model Shipment {
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  // Order Reference
+  orderId String @unique @map("order_id") @db.Text
+
+  // Carrier Information
+  carrierType CarrierType @map("carrier_type")
+  carrierName String      @map("carrier_name") @db.VarChar(100)
+
+  // Tracking Information
+  trackingNumber String         @map("tracking_number") @db.VarChar(100)
+  currentStatus  ShipmentStatus @default(PENDING) @map("current_status")
+
+  // Delivery Estimation
+  estimatedDeliveryDays String? @map("estimated_delivery_days") @db.VarChar(50)
+
+  // Pricing
+  shippingCost Decimal @map("shipping_cost") @db.Decimal(10, 2)
+
+  // Carrier-specific data
+  metadata Json? @db.JsonB
+
+  // Label Information
+  labelUrl String? @map("label_url") @db.Text
+
+  // Status flags
+  isActive Boolean @default(true) @map("is_active")
+
+  // Tracking
+  lastTrackedAt DateTime? @map("last_tracked_at")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  trackingEvents ShipmentTrackingEvent[]
+
+  @@index([orderId], map: "shipments_order_id_idx")
+  @@index([trackingNumber], map: "shipments_tracking_number_idx")
+  @@index([currentStatus], map: "shipments_status_idx")
+  @@index([isActive], map: "shipments_active_idx")
+  @@index([createdAt], map: "shipments_created_at_idx")
+  @@index([carrierType], map: "shipments_carrier_type_idx")
+  @@map("shipments")
+}
+
+// Shipment Tracking Events - History of status changes
+model ShipmentTrackingEvent {
+  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+
+  shipmentId String   @map("shipment_id") @db.Text
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  // Event Details
+  status     String         @db.VarChar(100)
+  statusCode ShipmentStatus @map("status_code")
+  location   String?        @db.VarChar(255)
+  remarks    String?        @db.Text
+
+  // Event Timestamp
+  timestamp DateTime
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([shipmentId], map: "shipment_tracking_events_shipment_id_idx")
+  @@index([timestamp], map: "shipment_tracking_events_timestamp_idx")
+  @@index([shipmentId, timestamp(sort: Desc)], map: "shipment_tracking_events_shipment_timestamp_idx")
+  @@map("shipment_tracking_events")
 }

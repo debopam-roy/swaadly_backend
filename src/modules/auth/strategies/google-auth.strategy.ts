@@ -14,6 +14,7 @@ import {
   VerifyAuthResponse,
 } from './interfaces/auth-strategy.interface';
 import { ERROR_MESSAGES } from '../../../common/constants';
+import { generateInitialsAvatar } from '../../../common/utils/avatar.util';
 
 @Injectable()
 export class GoogleAuthStrategy implements IAuthStrategy {
@@ -85,11 +86,19 @@ export class GoogleAuthStrategy implements IAuthStrategy {
       // Pre-fill user profile with Google data if available
       if (auth.user && (name || picture)) {
         const nameParts = name?.split(' ') || [];
+        const displayName = name || email.split('@')[0];
+
+        // Use Google picture if available, otherwise generate initials avatar
+        let avatarUrl = picture;
+        if (!avatarUrl && displayName) {
+          avatarUrl = generateInitialsAvatar({ name: displayName });
+        }
+
         await this.usersService.updateUserProfile(auth.id, {
           firstName: nameParts[0] || undefined,
           lastName: nameParts.slice(1).join(' ') || undefined,
-          displayName: name || undefined,
-          avatarUrl: picture || undefined,
+          displayName,
+          avatarUrl,
         });
       }
 
@@ -105,11 +114,19 @@ export class GoogleAuthStrategy implements IAuthStrategy {
       // Update user profile with Google data if onboarding not completed
       if (auth.user && !auth.user.onboardingCompleted && (name || picture)) {
         const nameParts = name?.split(' ') || [];
+        const displayName = auth.user.displayName || name || email.split('@')[0];
+
+        // Use existing avatar, or Google picture, or generate initials avatar
+        let avatarUrl = auth.user.avatarUrl || picture;
+        if (!avatarUrl && displayName) {
+          avatarUrl = generateInitialsAvatar({ name: displayName });
+        }
+
         await this.usersService.updateUserProfile(auth.id, {
           firstName: auth.user.firstName || nameParts[0] || undefined,
           lastName: auth.user.lastName || nameParts.slice(1).join(' ') || undefined,
-          displayName: auth.user.displayName || name || undefined,
-          avatarUrl: auth.user.avatarUrl || picture || undefined,
+          displayName,
+          avatarUrl,
         });
       }
 

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueryReviewsDto, ReviewSortBy } from './dto/query-reviews.dto';
 import { ReviewResponseDto } from './dto/review-response.dto';
+import { generateInitialsAvatar } from '../../common/utils/avatar.util';
 
 @Injectable()
 export class ReviewsService {
@@ -95,10 +96,16 @@ export class ReviewsService {
   }
 
   private mapToResponseDto(review: any): ReviewResponseDto {
+    // Generate avatar from reviewer name for legacy reviews
+    const reviewerAvatarUrl = review.reviewerName
+      ? generateInitialsAvatar({ name: review.reviewerName })
+      : undefined;
+
     return {
       id: review.id,
       reviewerName: review.reviewerName,
       reviewerEmail: review.reviewerEmail,
+      reviewerAvatarUrl,
       rating: review.rating,
       title: review.title,
       comment: review.comment,

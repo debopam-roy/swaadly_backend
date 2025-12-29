@@ -21,6 +21,8 @@
     "prisma:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
+    "@dicebear/collection": "^9.2.4",
+    "@dicebear/core": "^9.2.4",
     "@google-cloud/storage": "^7.18.0",
     "@nestjs/bull": "^11.0.4",
     "@nestjs/common": "^11.0.1",
