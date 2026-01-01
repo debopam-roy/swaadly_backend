@@ -11,7 +11,7 @@ datasource db {
 
 // Authentication table - handles login credentials and account status
 model Auth {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   // Authentication identifiers
   email    String? @unique @db.Text
@@ -42,7 +42,7 @@ model Auth {
 
 // User sessions table - tracks refresh tokens and device info
 model AuthSession {
-  id     String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id     String @id @default(uuid()) @db.Text
   authId String @map("auth_id") @db.Text
   auth   Auth   @relation(fields: [authId], references: [id], onDelete: Cascade)
 
@@ -72,7 +72,7 @@ model AuthSession {
 
 // User profile table - stores user information separate from auth
 model User {
-  id     String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id     String @id @default(uuid()) @db.Text
   authId String @unique @map("auth_id") @db.Text
   auth   Auth   @relation("AuthToUser", fields: [authId], references: [id], onDelete: Cascade)
 
@@ -81,14 +81,6 @@ model User {
   lastName    String? @map("last_name") @db.VarChar(100)
   displayName String? @map("display_name") @db.VarChar(150)
   avatarUrl   String? @map("avatar_url") @db.Text
-
-  // Contact & Address
-  addressLine1 String? @map("address_line1") @db.VarChar(255)
-  addressLine2 String? @map("address_line2") @db.VarChar(255)
-  city         String? @db.VarChar(100)
-  state        String? @db.VarChar(100)
-  postalCode   String? @map("postal_code") @db.VarChar(20)
-  country      String? @db.VarChar(100)
 
   // Additional profile data
   dateOfBirth DateTime? @map("date_of_birth") @db.Date
@@ -108,6 +100,7 @@ model User {
   orders       Order[]       @relation("UserToOrders")
   orderReviews OrderReview[]
   itemReviews  ItemReview[]
+  addresses    Address[]     @relation("UserToAddresses")
 
   @@index([firstName, lastName], map: "users_full_name_idx")
   @@index([onboardingCompleted], map: "users_onboarding_idx")
@@ -115,9 +108,54 @@ model User {
   @@map("users")
 }
 
+// Address Type Enum
+enum AddressType {
+  HOME
+  WORK
+  OTHER
+
+  @@map("address_type")
+}
+
+// User Addresses table - Multiple delivery addresses per user
+model Address {
+  id String @id @default(uuid()) @db.Text
+
+  // User Reference
+  userId String @map("user_id") @db.Text
+  user   User   @relation("UserToAddresses", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Address Type
+  addressType AddressType @default(HOME) @map("address_type")
+
+  // Contact Information
+  fullName    String @map("full_name") @db.VarChar(200)
+  phoneNumber String @map("phone_number") @db.VarChar(20)
+
+  // Address Details
+  addressLine1 String  @map("address_line1") @db.VarChar(255)
+  addressLine2 String? @map("address_line2") @db.VarChar(255)
+  city         String  @db.VarChar(100)
+  state        String  @db.VarChar(100)
+  postalCode   String  @map("postal_code") @db.VarChar(20)
+  country      String  @default("India") @db.VarChar(100)
+
+  // Default Address Flag
+  isDefault Boolean @default(false) @map("is_default")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId], map: "addresses_user_id_idx")
+  @@index([userId, isDefault], map: "addresses_user_default_idx")
+  @@index([createdAt(sort: Desc)], map: "addresses_created_at_idx")
+  @@map("addresses")
+}
+
 // Products table
 model Product {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   // Basic Info
   name   String  @db.VarChar(255)
@@ -159,7 +197,7 @@ model Product {
 
 // Product Variants table
 model ProductVariant {
-  id        String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id        String  @id @default(uuid()) @db.Text
   productId String  @map("product_id") @db.Text
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -191,9 +229,9 @@ model ProductVariant {
   displayOrder Int @default(0) @map("display_order") @db.Integer
 
   // Rating Aggregation (denormalized for performance)
-  averageRating       Decimal? @default(0.0) @map("average_rating") @db.Decimal(2, 1)
-  totalReviews        Int      @default(0) @map("total_reviews") @db.Integer
-  ratingDistribution  Json?    @default("{}") @map("rating_distribution") @db.JsonB
+  averageRating      Decimal? @default(0.0) @map("average_rating") @db.Decimal(2, 1)
+  totalReviews       Int      @default(0) @map("total_reviews") @db.Integer
+  ratingDistribution Json?    @default("{}") @map("rating_distribution") @db.JsonB
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -222,7 +260,7 @@ enum ImageDeviceType {
 
 // Product Images table (for product page display)
 model ProductImage {
-  id        String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id        String  @id @default(uuid()) @db.Text
   productId String  @map("product_id") @db.Text
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -247,7 +285,7 @@ model ProductImage {
 
 // Product Cart Images table (for cart and order page display)
 model ProductCartImage {
-  id        String  @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id        String  @id @default(uuid()) @db.Text
   productId String  @map("product_id") @db.Text
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -288,7 +326,7 @@ enum CouponStatus {
 
 // Main Coupons table
 model Coupon {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   // Coupon Identification
   code        String  @unique @db.VarChar(50) // e.g., "FIRST300", "WELCOME10"
@@ -341,7 +379,7 @@ model Coupon {
 
 // Coupon Usage History - Tracks who used which coupon and when
 model CouponUsage {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   // Coupon Reference
   couponId String @map("coupon_id") @db.Text
@@ -375,7 +413,7 @@ model CouponUsage {
 // Legacy Product Reviews table (pre-order system reviews)
 // Kept for backward compatibility with existing review data
 model Review {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   productId String  @map("product_id") @db.Text
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -415,7 +453,7 @@ model Review {
 // Order Review - Review for the entire order experience (delivery, packaging, service)
 // One review per order per customer
 model OrderReview {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   // Order being reviewed
   orderId String @unique @map("order_id") @db.Text
@@ -464,7 +502,7 @@ model OrderReview {
 // Item Review - Review for individual items in an order
 // One review per order item per customer
 model ItemReview {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   // Order Item being reviewed
   orderItemId String    @unique @map("order_item_id") @db.Text
@@ -573,7 +611,7 @@ enum DeliveryType {
 
 // Main Orders table
 model Order {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   // Order Identification
   orderNumber String @unique @map("order_number") @db.VarChar(50)
@@ -654,7 +692,7 @@ model Order {
 
 // Order Items table
 model OrderItem {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   orderId String @map("order_id") @db.Text
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -697,7 +735,7 @@ model OrderItem {
 
 // Payment table
 model Payment {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   orderId String @map("order_id") @db.Text
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -745,7 +783,7 @@ model Payment {
 
 // Order Status History
 model OrderStatusHistory {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   orderId String @map("order_id") @db.Text
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -800,7 +838,7 @@ enum ShipmentStatus {
 
 // Shipments table - Tracks all shipments created via carriers
 model Shipment {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   // Order Reference
   orderId String @unique @map("order_id") @db.Text
@@ -849,7 +887,7 @@ model Shipment {
 
 // Shipment Tracking Events - History of status changes
 model ShipmentTrackingEvent {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   shipmentId String   @map("shipment_id") @db.Text
   shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
@@ -878,7 +916,7 @@ model ShipmentTrackingEvent {
 
 // Newsletter Subscribers table - Stores users who subscribed to newsletter
 model NewsletterSubscriber {
-  id String @id @default(dbgenerated("gen_random_uuid()::TEXT")) @db.Text
+  id String @id @default(uuid()) @db.Text
 
   // Subscriber Information
   email String @unique @db.VarChar(255)

@@ -2,14 +2,20 @@ import {
   Controller,
   Get,
   Put,
+  Post,
   Body,
   HttpCode,
   HttpStatus,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { CompleteOnboardingDto } from './dto/complete-onboarding.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ImageUploadService } from '../../common/services/image-upload.service';
 
 /**
  * Users Controller
@@ -18,7 +24,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
  */
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly imageUploadService: ImageUploadService,
+  ) {}
 
   /**
    * Get Current User Profile
@@ -88,5 +97,44 @@ export class UsersController {
       message: 'Onboarding completed successfully',
       profile: updatedUser,
     };
+  }
+
+  /**
+   * Upload Profile Photo
+   * Uploads and processes user profile photo
+   */
+  @Post('profile/photo')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('photo'))
+  async uploadProfilePhoto(
+    @CurrentUser('sub') authId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No photo file provided');
+    }
+
+    try {
+      // Upload photo to GCS
+      const { imageUrl } = await this.imageUploadService.uploadProfilePicture(
+        file,
+        authId,
+      );
+
+      // Update user profile with new avatar URL
+      const updatedUser = await this.usersService.updateUserProfile(authId, {
+        avatarUrl: imageUrl,
+      });
+
+      return {
+        message: 'Profile photo uploaded successfully',
+        avatarUrl: imageUrl,
+        profile: updatedUser,
+      };
+    } catch (error) {
+      throw new BadRequestException(
+        `Failed to upload photo: ${error.message}`,
+      );
+    }
   }
 }

@@ -15,6 +15,7 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { NewsletterModule } from './modules/newsletter/newsletter.module';
+import { AddressesModule } from './modules/addresses/addresses.module';
 import { CommonModule } from './common/common.module';
 import redisConfig from './config/redis.config';
 import jwtConfig from './config/jwt.config';
@@ -41,6 +42,7 @@ import fast2smsConfig from './config/fast2sms.config';
     ReviewsModule,
     ShippingModule,
     NewsletterModule,
+    AddressesModule,
   ],
   controllers: [AppController],
   providers: [

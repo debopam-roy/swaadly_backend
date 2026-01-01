@@ -1305,6 +1305,11 @@
     "@types/jsonwebtoken" "9.0.10"
     jsonwebtoken "9.0.2"
 
+"@nestjs/mapped-types@^2.1.0":
+  version "2.1.0"
+  resolved "https://registry.npmjs.org/@nestjs/mapped-types/-/mapped-types-2.1.0.tgz"
+  integrity sha512-W+n+rM69XsFdwORF11UqJahn4J3xi4g/ZEOlJNL6KoW5ygWSmBB2p0S2BZ4FQeS/NDH72e6xIcu35SfJnE8bXw==
+
 "@nestjs/platform-express@^11.0.0", "@nestjs/platform-express@^11.0.1":
   version "11.1.9"
   resolved "https://registry.npmjs.org/@nestjs/platform-express/-/platform-express-11.1.9.tgz"
@@ -2650,12 +2655,12 @@ cjs-module-lexer@^2.1.0:
   resolved "https://registry.npmjs.org/cjs-module-lexer/-/cjs-module-lexer-2.1.1.tgz"
   integrity sha512-+CmxIZ/L2vNcEfvNtLdU0ZQ6mbq3FZnwAP2PPTiKP+1QOoKwlKlPgb8UKV0Dds7QVaMnHm+FwSft2VB0s/SLjQ==
 
-class-transformer@^0.5.1, class-transformer@>=0.4.1:
+"class-transformer@^0.4.0 || ^0.5.0", class-transformer@^0.5.1, class-transformer@>=0.4.1:
   version "0.5.1"
   resolved "https://registry.npmjs.org/class-transformer/-/class-transformer-0.5.1.tgz"
   integrity sha512-SQa1Ws6hUbfC98vKGxZH3KFY0Y1lm5Zm0SY8XX9zbK7FJCyVEac3ATW0RIpwzW+oOfmHE5PMPufDG9hCfoEOMw==
 
-class-validator@^0.14.3, class-validator@>=0.13.2:
+"class-validator@^0.13.0 || ^0.14.0", class-validator@^0.14.3, class-validator@>=0.13.2:
   version "0.14.3"
   resolved "https://registry.npmjs.org/class-validator/-/class-validator-0.14.3.tgz"
   integrity sha512-rXXekcjofVN1LTOSw+u4u9WXVEUvNBVjORW154q/IdmYWy1nMbOU9aNtZB0t8m+FJQ9q91jlr2f9CwwUFdFMRA==
